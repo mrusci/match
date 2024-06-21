@@ -29,8 +29,8 @@ ${sw_for_loops}
 #include <${inc_name}>
 % endfor
 
-static ${types.mem_data_macro_and_type} padding_array ${padding_c_array["shape"]} = ${padding_c_array["value"]};
-static ${types.mem_data_macro_and_type} strides_array ${strides_c_array["shape"]} = ${strides_c_array["value"]};
+static int padding_array ${padding_c_array["shape"]} = ${padding_c_array["value"]};
+static int strides_array ${strides_c_array["shape"]} = ${strides_c_array["value"]};
 % if weights_and_constants["len"]>0:
 ## define weights for layers containing weights
 static ${types.mem_data_macro_and_type} weights_and_constants ${weights_and_constants["shape"]} = ${weights_and_constants["value"]};
@@ -365,7 +365,9 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     % endif
     ${sync_apis.wait_input_transfers}(&comm_kernel);
     ${sync_apis.async_transfers}(&comm_kernel);
+    % if mem_apis.copy_out_prev_computation!="match_copy_out_prev_computation":
     if(iter>0)  ${sync_apis.prev_computation}(&comm_kernel);
+    % endif
     ${comp_apis.innermost_computation}(&kernel);
     ${sync_apis.curr_computation}(&comm_kernel);
     % if last_movements["O"]!=idx:
@@ -380,15 +382,17 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     ## ITER CAN BE USED TO HAVE DOUBLE BUFFERING
     ${mem_apis.copy_out_curr_computation}(
         &comm_kernel,
-        &dim_O,kernel_O_curr_int,kernel_O_curr_ext,
+        &(dim_O.common_dim),kernel_O_curr_int,kernel_O_curr_ext,
         ${for_loop["mem_O"]},${default_mem["O"] if last_movements["O"]==0 else sw_for_loops[last_movements["O"]-1]["mem_O"]}
     );
     ${sync_apis.wait_output_transfers}(&comm_kernel);
+    % if mem_apis.copy_out_prev_computation!="match_copy_out_prev_computation":
     if(iter>0)  ${mem_apis.copy_out_prev_computation}(
         &comm_kernel,
-        &dim_O,kernel_O_prev_int,kernel_O_prev_ext,
+        &(dim_O.common_dim),kernel_O_prev_int,kernel_O_prev_ext,
         ${for_loop["mem_O"]},${default_mem["O"] if last_movements["O"]==0 else sw_for_loops[last_movements["O"]-1]["mem_O"]}
     );
+    % endif
     kernel_O_prev_ext=kernel_O_curr_ext;kernel_O_prev_int=kernel_O_curr_int;
     % for operand in operands:
     % if last_movements[operand]!=idx:
@@ -411,12 +415,12 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     substract_relative_idxs_${mem_transfer_operand}(&tile_idxs_${mem_transfer_operand}_${idx}_relative,&abs_tile_idxs_${mem_transfer_operand});
     % endfor
     % endfor
+    % if mem_apis.copy_out_prev_computation!="match_copy_out_prev_computation":
     ${sync_apis.prev_computation}(&comm_kernel);
     ${mem_apis.copy_out_prev_computation}(
-        &comm_kernel,&dim_O,kernel_O_prev_int,kernel_O_prev_ext,
+        &comm_kernel,&(dim_O.common_dim),kernel_O_prev_int,kernel_O_prev_ext,
         ${sw_for_loops[last_movements["O"]]["mem_O"]},${default_mem["O"] if last_movements["O"]==0 else sw_for_loops[last_movements["O"]-1]["mem_O"]}
     );
-    % if mem_apis.copy_out_prev_computation!="match_copy_out_prev_computation":
     ${sync_apis.wait_output_transfers}(&comm_kernel);
     ${sync_apis.async_transfers}(&comm_kernel);
     % endif

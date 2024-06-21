@@ -225,17 +225,17 @@ void dense_out_comp(void* args){
 }
 void cluster_kernel_function_wrapper(cluster_kernel* kernel){
     if(kernel->common_kernel->specific_pattern==pointwise_conv2d)
-        pi_team_offload_preset(pw_conv_2d_comp, kernel);
+        pi_cl_team_fork(NUM_CORES,pw_conv_2d_comp, kernel);
     else if(kernel->common_kernel->specific_pattern==depthwise_conv2d_less_4)
-        pi_team_offload_preset(dw_less_four_fs_conv_2d_comp, kernel);
+        pi_cl_team_fork(NUM_CORES,dw_less_four_fs_conv_2d_comp, kernel);
     else if(kernel->common_kernel->specific_pattern==depthwise_conv2d)
-        pi_team_offload_preset(dw_conv_2d_comp, kernel);
+        pi_cl_team_fork(NUM_CORES,dw_conv_2d_comp, kernel);
     else if(kernel->common_kernel->specific_pattern==conv2d)
-        pi_team_offload_preset(conv_2d_comp, kernel);
+        pi_cl_team_fork(NUM_CORES,conv_2d_comp, kernel);
     else if(kernel->common_kernel->specific_pattern==dense)
-        pi_team_offload_preset(dense_comp, kernel);
+        pi_cl_team_fork(NUM_CORES,dense_comp, kernel);
     else if(kernel->common_kernel->specific_pattern==dense_out)
-        pi_team_offload_preset(dense_out_comp, kernel);
+        pi_cl_team_fork(NUM_CORES,dense_out_comp, kernel);
     else if(kernel->common_kernel->specific_pattern==elemwise_add)
-        pi_team_offload_preset(add_comp, kernel);
+        pi_cl_team_fork(NUM_CORES,add_comp, kernel);
 }

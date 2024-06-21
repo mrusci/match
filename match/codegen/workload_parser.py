@@ -175,7 +175,7 @@ class WorkloadParser:
             "O": ["K", "OY", "OX"],
             "W": ["K", "C", "FY", "FX"],
         }
-        self.layer_data.input_dim_mapping = {"C": "C", "OY": "IY", "OX": "IX"}
+        self.layer_data.input_dim_mapping = {"C": "C", "OY": "IY", "OX": "IX", "FX": "FX", "FY": "FY"}
         self.layer_data.operands = ["O", "W", "I"]
         self.layer_data.input_operands = ["I"]
         self.layer_data.padded_dims = []
@@ -228,7 +228,7 @@ class WorkloadParser:
             "O": ["K", "OY", "OX"],
             "Y": ["K", "OY", "OX"],
         }
-        self.layer_data.input_dim_mapping = {"K": "C", "OY": "IY", "OX": "IX"}
+        self.layer_data.input_dim_mapping = {"K": "C", "OY": "IY", "OX": "IX", "FX": "FX", "FY": "FY"}
         self.layer_data.operands = ["O", "X", "Y"]
         self.layer_data.input_operands = ["X", "Y"]
         self.layer_data.padded_dims = []
@@ -323,7 +323,7 @@ class WorkloadParser:
             "O": [['OY','OX','K'],["K", "OY", "OX"]][1],
             "W": [['K','C','FY','FX'],["K", "C", "FY", "FX"]][1],
         }
-        self.layer_data.input_dim_mapping = {("C" if not depthwise else "K"): "C", "OY": "IY", "OX": "IX"}
+        self.layer_data.input_dim_mapping = {("C" if not depthwise else "K"): "C", "OY": "IY", "OX": "IX" , "FX": "FX", "FY": "FY"}
         self.layer_data.operands = ["O", "W", "I"]
         self.layer_data.input_operands = ["I"]
         self.layer_data.padded_dims = ["OX", "OY"]

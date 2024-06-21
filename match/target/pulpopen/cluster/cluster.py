@@ -113,6 +113,8 @@ class ClusterModule(ExecModule):
             return buff_mem
         
         memories[0].buffer_for_layer_func=buffers_for_l1_mem
+        memories[0].k_bytes=32
+        memories[1].k_bytes=512
         return memories
     
     def partitioning_patterns(self):
@@ -126,7 +128,6 @@ class ClusterModule(ExecModule):
 
     def mem_apis_def(self,mem_apis: MemoryApis=MemoryApis()):
         mem_apis.copy_out_curr_computation="cluster_copy_out_curr_computation"
-        mem_apis.copy_out_prev_computation="cluster_copy_out_prev_computation"
         mem_apis.mem_transfer={
             "I":"cluster_mem_transfer_I",
             "X":"cluster_mem_transfer_X",
@@ -150,14 +151,13 @@ class ClusterModule(ExecModule):
         return platform_apis
     
     def sync_apis_def(self,sync_apis: SyncApis=SyncApis()):
-        sync_apis.async_transfers="cluster_wait_any_transfer"
-        sync_apis.curr_computation="cluster_wait_curr_computation"
-        sync_apis.prev_computation="cluster_wait_prev_computation"
+        sync_apis.wait_input_transfers="cluster_wait_any_transfer"
+        sync_apis.wait_output_transfers="cluster_wait_any_transfer"
         return sync_apis
 
     def types_def(self,types: MatchTypes=MatchTypes()):
         types.kernel_struct="cluster_kernel"
-        types.mem_data_macro_and_type="GAP_L2_DATA uint8_t"
+        types.mem_data_macro_and_type="PI_L2 uint8_t"
         return types
 
     def cost_model(self):

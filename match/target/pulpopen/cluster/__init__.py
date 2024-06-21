@@ -1,1 +1,1 @@
-from .gap9cluster import Gap9Cluster
+from .cluster import ClusterModule
