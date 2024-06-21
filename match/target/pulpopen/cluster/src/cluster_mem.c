@@ -1,5 +1,5 @@
 #include <cluster_mem.h>
-#define MATCH_PULP_OPEN_DEBUG 1
+//#define MATCH_PULP_OPEN_DEBUG 1
 // memory pts
 static unsigned int l1_memory=0x0;
 static unsigned int l1_O_off[2]={0,0};

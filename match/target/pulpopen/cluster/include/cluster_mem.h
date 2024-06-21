@@ -5,7 +5,7 @@
 #include <match_tile_indexes.h>
 #include <cluster_comp.h>
 #include "dory_dma.h"
-#include <gap9_cluster.h>
+#include <gap_cluster.h>
 
 void cluster_init_l1_memory();
 
