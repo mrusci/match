@@ -123,6 +123,7 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         prev_mult_=0
         #print(f"Cost model multiplicities {sorted_multiplicities}")
         for idx,mult_ in enumerate(sorted_multiplicities):
+            cycles+=(mult_-prev_mult_) * 173 # TO FIX: OVERHEAD CALL MATCH
             if idx==0:
                 cycles+=max([0]+[self.transfer_costs[operand] for operand in self.operands if operand!='O' and self.outermost_loop_iters[operand]>=mult_])
                 prev_mult_=1

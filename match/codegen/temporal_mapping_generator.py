@@ -27,7 +27,7 @@ class TemporalMappingGenerator:
     def generate_workload(self):
         self.workload_parser.visit()
         self.layer_data=self.workload_parser.get_layer_data()
-
+        
     def set_exec_module_for_layer(self):
         self.exec_module.match_optimal_spatial_mapping(pattern_name=self.pattern_name,dim_sizes=
                                                  self.layer_data.layer_attrs["loop_sizes"],layer_attrs=self.layer_data.layer_attrs)

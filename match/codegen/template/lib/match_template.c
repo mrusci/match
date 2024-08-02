@@ -198,6 +198,7 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     dimension_O_${func_number} dim_O; tile_indexes_O abs_tile_idxs_O;
     layer_loops_indexes layer_loops_idxs;
     // setup(init) dimensions
+  start_g_perf_counter();
     match_initial_setup(
         % for i_operand in input_operands:
         &dim_${i_operand}, &abs_tile_idxs_${i_operand},
@@ -391,6 +392,10 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     );
     ${sync_apis.async_transfers}(&comm_kernel);
     ${mem_apis.shutdown_mem}(&comm_kernel);
+  stop_g_perf_counter();
+  int32_t cycles=get_acc_perf_counter();
+  printf("\ncycles ${func_name}:%d\n",cycles);
+  
     % if "end_codegen" in debug_level:
     printf("End of ${func_name} codegen function!\n");
     % endif

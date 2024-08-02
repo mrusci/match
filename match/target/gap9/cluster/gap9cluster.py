@@ -18,6 +18,9 @@ class Gap9Cluster(ExecModule):
                                               "depthwise_conv2d_less_4",
                                               "depthwise_conv2d",
                                               "conv2d",
+                                              'conv2d_sparse_4', 
+                                              'conv2d_sparse_8', 
+                                              'conv2d_sparse_16',
                                               "elemwise_add",
                                               "dense",
                                               "dense_out"
@@ -91,8 +94,13 @@ class Gap9Cluster(ExecModule):
             return "dense"
         elif pattern_name=="dense_out":
             return "dense_out"
+        elif pattern_name=="conv2d_sparse_4_bnorm_requant":
+            return "conv2d_sparse_4"
+        elif pattern_name=="conv2d_sparse_8_bnorm_requant":
+            return "conv2d_sparse_8"
+        elif pattern_name=="conv2d_sparse_16_bnorm_requant":
+            return "conv2d_sparse_16"
         else:
-            # DEFAULT LIKE CONV2D
             return "conv2d"
 
     def memories_def(self, pattern_name, operands):
@@ -193,7 +201,36 @@ class Gap9Cluster(ExecModule):
                     single_constants[layer_arg_name]=str(layer_arg_val.data)
                 else:
                     if layer_arg_name=="nn.conv2d.param.0":
-                        constbytes=bytaze(layer_arg_val.data.numpy().transpose((0,2,3,1)))
+                        layer_arg_val_transposed = layer_arg_val.data.numpy().transpose((0,2,3,1))
+
+                        if True:
+                            if "sparse" in pattern_name:
+                                def create_sparse_array(layer_arg_val):
+                                    i= 0
+                                    layer_arg_val_transposed = []
+                                    for c_out in range(layer_arg_val.shape[0]):
+                                        layer_arg_val_transposed_k1 = []
+                                        for k1 in range(layer_arg_val.shape[1]):
+                                            layer_arg_val_transposed_k2 = []
+                                            for k2 in range(layer_arg_val.shape[2]):
+                                                layer_arg_val_transposed_cin = []
+                                                for c_in in range(layer_arg_val.shape[3]):
+                                                    if layer_arg_val[c_out, k1, k2, c_in] != 0:
+                                                        layer_arg_val_transposed_cin.append(layer_arg_val[c_out, k1, k2, c_in])
+                                                        ### TRICK TO ADD THE MEMORY FOR THE INDEX
+                                                        if "4" in pattern_name:
+                                                            i = np.abs(i-1)
+                                                            if i == 1:
+                                                                layer_arg_val_transposed_cin.append(layer_arg_val[c_out, k1, k2, c_in])
+                                                        else: 
+                                                            layer_arg_val_transposed_cin.append(layer_arg_val[c_out, k1, k2, c_in])
+                                                layer_arg_val_transposed_k2.append(layer_arg_val_transposed_cin)
+                                            layer_arg_val_transposed_k1.append(layer_arg_val_transposed_k2)
+                                        layer_arg_val_transposed.append(layer_arg_val_transposed_k1)
+                                    return layer_arg_val_transposed
+                                layer_arg_val_transposed = np.array(create_sparse_array(layer_arg_val_transposed))
+
+                        constbytes=bytaze(layer_arg_val_transposed)
                     elif layer_arg_name=="nn.dense.param.0":
                         constbytes=bytaze(layer_arg_val.data.numpy().transpose((0,1)))
                     else:

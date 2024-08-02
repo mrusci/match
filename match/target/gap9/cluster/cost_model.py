@@ -94,15 +94,80 @@ class Gap9ClusterCostModel(ZigZagMatchCostModel):
         output_shape=[1,self.dmaconfstruct['O']['len_1d_copy'],self.dmaconfstruct['O']['num_2d_copies'],self.dmaconfstruct['O']['num_1d_copies']]
         strides=self.layer_data.strides
         if self.layer_data.specific_pattern in ["conv2d","pointwise_conv2d"]:
-            iterations = _floor(int(output_shape[2]*strides[0]), 8)* _floor(int(output_shape[3]*strides[1]), 2) * _floor(int(ch_out), 4)
-            im2col = kernel_size_x * kernel_size_y * ch_in * 2
+            iterations = _floor(int(ch_out), 4) * _floor(int(output_shape[2]*strides[0]), 8)* _floor(int(output_shape[3]*strides[1]), 2)
+            im2col = kernel_size_x * kernel_size_y * ch_in * 2 // 4
             matmul = (5 + _floor(kernel_size_x * kernel_size_y * ch_in, 4) * (6 + 8) + 10)
-            latency += iterations * (im2col + matmul)
+            latency = iterations * (im2col + matmul)
         elif self.layer_data.specific_pattern in ['depthwise_conv2d','depthwise_conv2d_less_4']:
             # 1 MAC/cycle
-            latency = 4 * _floor(ch_out, 8)  * _floor(output_shape[3]*strides[1],4) * kernel_size_x * kernel_size_y * int(output_shape[2]*strides[0])
+            latency = 4 * _floor(ch_out, 8) * _floor(output_shape[3]*strides[1],4) * kernel_size_x * kernel_size_y * int(output_shape[2]*strides[0])
         elif self.layer_data.specific_pattern=='dense':
             latency += _floor(ch_in, 2) * _floor(ch_out, 4)
+        elif self.layer_data.specific_pattern in ['conv2d_sparse_4', 'conv2d_sparse_8', 'conv2d_sparse_16']:
+            OX = output_shape[3]; OY = output_shape[2]
+            # TODO : Inserire qua N e M a seconda dello sparsity pattern
+            N = 1; SOFWARE_OP = False
+            if self.layer_data.specific_pattern == 'conv2d_sparse_4':
+                M = 4
+            elif self.layer_data.specific_pattern == 'conv2d_sparse_8':
+                M = 8
+            elif self.layer_data.specific_pattern == 'conv2d_sparse_16':
+                M = 16
+            # K is now 1. Kernels are 1x2 due to N:M sparsity being on the C*FX*FY dimension
+            # (No indices are shared over K)
+            iterations =  _floor(int(ch_out), 1) * _floor(int(OY * strides[0]), 8)* _floor(int(OX * strides[1]), 2)
+            # Dense im2col
+            im2col = (kernel_size_x * kernel_size_y * ch_in * 2  // 4 if (kernel_size_x * kernel_size_y) != 1 else 0)
+            # Sparse Matmul - Software
+            sparse_dim = ((kernel_size_x * kernel_size_y * ch_in) * N) // M
+            if SOFWARE_OP:
+                if M == 4:
+                    n_op_getmask = 1 + 2 + 2 + 1; add_shift = 1 + 1 + 1; loads = 1 + 4 + 4 + 1; ptr_update = 2; macs = 2
+                    matmul_cost = n_op_getmask + add_shift + loads + ptr_update + macs
+                elif M in [8, 16]:
+                    n_op_getmask = 2 + 2; add_shift = 1 + 1 + 1; loads = 2 + 4 + 4 + 1; ptr_update = 2; macs = 2
+                    matmul_cost = n_op_getmask + add_shift + loads + ptr_update + macs
+                matmul = _floor(sparse_dim, 4) * (matmul_cost) + 10
+                latency = iterations * (im2col + matmul)
+            else:  # Extended ISA
+                n_op_getmask = 0
+                if M == 4:
+                    n_custom_op = 16; loads = 1 + 2; macs = 4
+                elif M in [8, 16]:
+                    n_custom_op = 8; loads = 2; macs = 2
+                matmul_cost = n_op_getmask + n_custom_op + loads + macs
+                matmul = _floor(sparse_dim, 4) * (matmul_cost) + 10 + 5
+                latency = iterations * (im2col + matmul)
+        elif self.layer_data.specific_pattern == "dense_sparse":
+            N_CORES = 8; SOFWARE_OP = True; N = 1; M = 4
+            # Kernel is x2, unrolled on the output dim.
+            sparse_dim = (ch_in * N) // M
+            im2col = 0
+            if SOFWARE_OP:
+                iterations = _floor(int(ch_out), N_CORES)
+                if M == 4:
+                    n_op_getmask = 1 + 2 + 2 + 1; add_shift = 1 + 1 + 1; loads = 1 + 4 + 1; ptr_update = 1; macs = 1
+                    matmul_cost = n_op_getmask + add_shift + loads + ptr_update + macs
+                else:
+                    n_op_getmask = 1 + 1 + 1 + 1; add_shift = 1 + 1 + 1; loads = 2 + 4 + 1; ptr_update = 1; macs = 1
+                    matmul_cost = n_op_getmask + add_shift + loads + ptr_update + macs
+                matmul = _floor(sparse_dim, 4) * (matmul_cost)
+                latency += iterations * (matmul)
+            else:
+                iterations = _floor(int(ch_out), N_CORES * 2)
+                n_op_getmask = 0
+                if M == 4:
+                    loads = 4 + 1; n_custom_op = 16; macs = 4; matmul_cost = loads + n_custom_op + macs
+                else:
+                    loads = 4 + 1; n_custom_op = 16; macs = 2; matmul_cost = loads + n_custom_op + macs
+                matmul = _floor(sparse_dim, 4) * (matmul_cost)
+                latency += iterations * (matmul)
         else:
             latency += _floor(ch_in, 2) * _floor(ch_out, 4)
         return latency
+    
+
+    # SPARSE START
+
+
+    # # SPARSE END

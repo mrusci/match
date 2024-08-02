@@ -78,7 +78,7 @@ class WorkloadParser:
         elif dtype[:4] == "uint":
             return int(dtype[4:])
         # put here other cases
-        return 8
+        return dtype
 
     def get_bits_type(self, dtype):
         if dtype[:3] == "int":
@@ -259,6 +259,7 @@ class WorkloadParser:
         iprec = call.args[0].checked_type.dtype
         wtype = call.args[1].checked_type.shape
         wprec = call.args[1].checked_type.dtype
+        ##### TYPE OF WEIGHTS CHANGING FOR TRICK FOR SPARSITY
         otype = call.checked_type.shape
         i_n, i_c, i_h, i_w = self.get_io_from_layout(attrs.data_layout, itype)
         w_cout, w_cin, w_ksh, w_ksw = self.get_io_from_layout(attrs.data_layout, wtype)
@@ -291,10 +292,18 @@ class WorkloadParser:
             "FY": int(kernel_size[0]),
             "FX": int(kernel_size[1]),
         }
+        wbits = self.get_bits(wprec)
+        if True:
+            if self.pattern_name == 'conv2d_sparse_4_bnorm_requant':
+                wbits = 2 + 1 # memoria pesi K * (C*FX*FY) // M*8 + memoria indici K * (C*FX*FY) // M * 4 * 2
+            elif self.pattern_name == 'conv2d_sparse_8_bnorm_requant':
+                wbits = 1 + 1 # memoria pesi K * (C*FX*FY) // M*8 + memoria indici K * (C*FX*FY) // M * 4 * 2
+            elif self.pattern_name == 'conv2d_sparse_16_bnorm_requant':
+                wbits = 0.5 + 0.5 # memoria pesi K * (C*FX*FY) // M*8 + memoria indici K * (C*FX*FY) // M * 4 * 2
         self.layer_data.operand_precision = {
             "O": self.get_bits("int8"),
             "O_final": self.get_bits("int8"),
-            "W": self.get_bits(wprec),
+            "W": wbits ,
             "I": self.get_bits(iprec),
         }
         self.layer_data.padding = {

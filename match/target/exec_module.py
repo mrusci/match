@@ -315,10 +315,7 @@ class ExecModule(ABC):
         return self.default_include_list+ex_module_inc_list
 
     def operand_memories(self,operands):
-        return {
-            operand:[mem.name for mem in self.platform_memories if operand in mem.operands][::-1]
-            for operand in operands
-        }
+        return {operand:[mem.name for mem in self.platform_memories if operand in mem.operands][::-1] for operand in operands}
     
     def add_option_to_module(self,option,value):
         self.module_options[option]=value

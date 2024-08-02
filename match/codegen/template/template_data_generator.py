@@ -153,15 +153,23 @@ class TemplateDataGenerator:
             for idx, sl in enumerate(general_template_data["sw_for_loops"])
         }
         general_template_data["last_movements"] = {operand: -1 for operand in self.layer_data.operands}
+        sparse_divider = 8
+        if True:
+            if "sparse_16" in self.pattern_name:
+                sparse_divider = 1
+            elif "sparse_8" in self.pattern_name:
+                sparse_divider = 2
+            if "sparse_4" in self.pattern_name:
+                sparse_divider = 3
         general_template_data["size_loops_mem"] = {
             operand: {
                 rel_dim: {
-                    general_template_data["default_mem"][operand]: general_template_data["layer_attrs"]["loop_sizes"][
-                        rel_dim
+                    general_template_data["default_mem"][operand]: int(general_template_data["layer_attrs"]["loop_sizes"][
+                        rel_dim 
                         if "nn.conv2d" in self.layer_data.pattern_operations and self.layer_data.layer_attrs["nn.conv2d_depthwise"]
                         or operand not in general_template_data["input_operands"]
                         else general_template_data["input_dim_mapping"][rel_dim]
-                    ],
+                    ] / 8 * (sparse_divider if operand == 'W' and rel_dim == 'C' else 8)),
                     **{
                         general_template_data["sw_for_loops_dict"][fl_mem_t_fn][f"mem_{operand}"]: int(
                             general_template_data["layer_attrs"]["loop_sizes"][
@@ -173,15 +181,8 @@ class TemplateDataGenerator:
                                 else general_template_data["input_dim_mapping"][rel_dim]
                             ]
                             / np.prod(
-                                []
-                                + [
-                                    tilp["size"]
-                                    for tilp in general_template_data["sw_for_loops"][
-                                        : general_template_data["sw_for_loops_dict"][fl_mem_t_fn]["idx_loops"]
-                                    ]
-                                    if tilp["name"] == rel_dim
-                                ]
-                            )
+                                []+ [tilp["size"] for tilp in general_template_data["sw_for_loops"][: general_template_data["sw_for_loops_dict"][fl_mem_t_fn]["idx_loops"]]
+                                    if tilp["name"] == rel_dim]) / 8 * (sparse_divider if operand == 'W' and rel_dim == 'C' else 8)
                         )
                         for fl_mem_t_fn, ops in general_template_data["memory_transfers"].items()
                         if operand in ops
@@ -191,7 +192,6 @@ class TemplateDataGenerator:
             }
             for operand in general_template_data["operands"]
         }
-        
         # mem computation sizes
         for operand in general_template_data["operands"]:
             is_op_input=operand in general_template_data["input_operands"]

@@ -77,7 +77,6 @@ def partition(mod, params, dpu, opts):
 
     pipeline.append(MatchSaveRelay("pre_hw_dependent"))
     pipeline+=target.network_transformations(opts)
-
     pipeline.append(transform.InferType())
     pipeline.append(MatchSaveRelay("hw_dependent"))
     pipeline.append(transform.MergeComposite(pattern_table(target=target)))

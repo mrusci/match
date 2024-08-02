@@ -27,6 +27,13 @@ def conv2d_bnorm_requant_pattern():
     bnorm = batchnorm_pattern(is_op("cast")(conv2d)) | batchnorm_pattern(conv2d)
     return _requant_pattern(bnorm)
 
+def conv2d_sparse_bnorm_requant_pattern():
+    conv2d = is_op("nn.conv2d")(
+            wildcard(), wildcard()
+    )
+    bnorm = batchnorm_pattern(is_op("cast")(conv2d)) | batchnorm_pattern(conv2d)
+    return _requant_pattern(bnorm)
+
 def dense_bnorm_requant_pattern():
     dense = is_op("nn.dense")(
             wildcard(), wildcard()
@@ -123,6 +130,51 @@ def _check_biasadd_requant(pattern):
         return None
 
     return bias_add.args[0]
+
+def check_sparsity_4(pattern):
+    weights_conv2d = pattern.args[0].args[0].args[0].args[0].args[0].args[1].data.numpy()
+    check = check_sparsity_pattern_4(weights_conv2d)
+    return check
+
+def check_sparsity_pattern_4(weights):
+    import numpy as np
+    K,C,FX,FY = weights.shape[0], weights.shape[1], weights.shape[2], weights.shape[3]
+    num_weights_non_zero = sum(np.transpose(weights!=0,(1,0,2,3)))
+    tot_weights = np.sum(num_weights_non_zero == int(C/4))
+    if tot_weights == K*FX*FY:
+        return True
+    else:
+        return False
+    
+def check_sparsity_8(pattern):
+    weights_conv2d = pattern.args[0].args[0].args[0].args[0].args[0].args[1].data.numpy()
+    check = check_sparsity_pattern_8(weights_conv2d)
+    return check
+
+def check_sparsity_pattern_8(weights):
+    import numpy as np
+    K,C,FX,FY = weights.shape[0], weights.shape[1], weights.shape[2], weights.shape[3]
+    num_weights_non_zero = sum(np.transpose(weights!=0,(1,0,2,3)))
+    tot_weights = np.sum(num_weights_non_zero == int(C/8))
+    if tot_weights == K*FX*FY:
+        return True
+    else:
+        return False
+    
+def check_sparsity_16(pattern):
+    weights_conv2d = pattern.args[0].args[0].args[0].args[0].args[0].args[1].data.numpy()
+    check = check_sparsity_pattern_16(weights_conv2d)
+    return check
+
+def check_sparsity_pattern_16(weights):
+    import numpy as np
+    K,C,FX,FY = weights.shape[0], weights.shape[1], weights.shape[2], weights.shape[3]
+    num_weights_non_zero = sum(np.transpose(weights!=0,(1,0,2,3)))
+    tot_weights = np.sum(num_weights_non_zero == int(C/16))
+    if tot_weights == K*FX*FY:
+        return True
+    else:
+        return False
 
 def check_conv2d(pattern):
     """Check if the Conv2D is supported by the soma dory accelerator"""
@@ -236,10 +288,13 @@ def check_element_wise_add(pattern):
 def partitioning_patterns():
     return [
         PartitioningPattern(name="conv2d_bnorm_requant",pattern=conv2d_bnorm_requant_pattern,ordered_operation="nn.conv2d"),
+        PartitioningPattern(name="conv2d_sparse_4_bnorm_requant",pattern=conv2d_sparse_bnorm_requant_pattern,additional_checks=check_sparsity_4,ordered_operation="nn.conv2d"),
+        PartitioningPattern(name="conv2d_sparse_8_bnorm_requant",pattern=conv2d_sparse_bnorm_requant_pattern,additional_checks=check_sparsity_8,ordered_operation="nn.conv2d"),
+        PartitioningPattern(name="conv2d_sparse_16_bnorm_requant",pattern=conv2d_sparse_bnorm_requant_pattern,additional_checks=check_sparsity_16,ordered_operation="nn.conv2d"),
         PartitioningPattern(name="conv2d_bias_add_requant",pattern=conv2d_pattern,additional_checks=check_conv2d,ordered_operation="nn.conv2d"),
         PartitioningPattern(name="conv2d_bias_add",pattern=only_conv_2d_and_bias_pattern,ordered_operation="nn.conv2d"),
         PartitioningPattern(name="dense_bnorm_requant",pattern=dense_bnorm_requant_pattern,ordered_operation="nn.dense"),
         PartitioningPattern(name="dense_bias_add_requant",pattern=fully_connected_pattern,additional_checks=check_fully_connected,ordered_operation="nn.dense"),
         PartitioningPattern(name="add_requant",pattern=element_wise_add_pattern,additional_checks=check_element_wise_add,ordered_operation="add"),
-        PartitioningPattern(name="dense_out",pattern=dense_out_pattern,ordered_operation="dense")
+        PartitioningPattern(name="dense_out",pattern=dense_out_pattern,ordered_operation="dense")   
     ]
