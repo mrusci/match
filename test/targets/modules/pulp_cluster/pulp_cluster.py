@@ -21,6 +21,8 @@ class PulpCluster(ExecModule):
                                               "pulp_cluster": ModuleLib(name="pulp_cluster", base_path=os.path.dirname(__file__)+"/../libs/pulp_cluster"),
                                               "pulp_mem": ModuleLib(name="pulp_mem", base_path=os.path.dirname(__file__)+"/../libs/pulp_mem"),
                                               "pulp_utils": ModuleLib(name="pulp_utils", base_path=os.path.dirname(__file__)+"/../libs/pulp_utils"),
+                                              "pulp_utils": ModuleLib(name="pulp_utils", base_path=os.path.dirname(__file__)+"/../libs/pulp_utils"),
+                                              "pulp_train": ModuleLib(name="pulp_train", base_path=os.path.dirname(__file__)+"/../libs/pulp-trainlib", src_path=os.path.dirname(__file__)+"/../libs/pulp-trainlib/lib/sources", inc_path=os.path.dirname(__file__)+"/../libs/pulp-trainlib/lib/include/"),
                                           })
         self.NUM_CORES = num_cores
         self.L1_SCRATCHPAD_KB_SIZE = l1_kb_size
@@ -223,6 +225,22 @@ class PulpCluster(ExecModule):
             if conv.attrs.data_layout!="NHWC":
                 return False
             return True
+        
+        # training layers 
+        def conv2dadd():
+            #Create pattern for a 2D Conv block, with bias and ReLU.
+            conv2d = is_op("nn.conv2d")(
+                wildcard(), wildcard()
+            )
+            conv2d = is_op("cast")(conv2d) | conv2d
+            bias_add = is_op("nn.bias_add")(conv2d, wildcard())
+            return bias_add
+
+        # checks for training
+        def std_convs_fp32(node):
+            conv = add_checks_get_first_op(node, "nn.conv2d")
+            print('++++ This is a conv2d?')
+            return conv.checked_type.dtype == 'float32'
 
         return [
             PartitioningPattern(name="dense_out",pattern=dense_pt_out),
@@ -231,4 +249,7 @@ class PulpCluster(ExecModule):
             PartitioningPattern(name="depthwise_conv2d",pattern=conv_pt_requant,additional_checks=only_dw_convs),
             PartitioningPattern(name="pointwise_conv2d",pattern=conv_pt_requant,additional_checks=only_pw_convs),
             PartitioningPattern(name="add_requant",pattern=add_pt_requant,additional_checks=only_out_uint8),
+        ] + [
+            # add training layers
+            PartitioningPattern(name="conv2d_train", pattern=conv2dadd, additional_checks=std_convs_fp32),
         ]

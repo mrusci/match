@@ -18,6 +18,8 @@ INC_PATHS = -I${STANDALONE_CRT_PATH}/include \
 			 $(foreach model, $(MODEL_DIRS), -I$(model)/include) \
 			 -I ./include/
 
+INC_PATHS += -I ./include/pulp_train/  # temp fix
+
 # Source files
 SRC =  $(foreach model, $(MODEL_DIRS), $(wildcard $(model)/src/*.c)) $(shell find $(abspath $(SRC_DIR)) -name '*.c')  $(STANDALONE_CRT_PATH)/src/runtime/crt/common/crt_backend_api.c $(STANDALONE_CRT_PATH)/src/runtime/crt/memory/stack_allocator.c
 

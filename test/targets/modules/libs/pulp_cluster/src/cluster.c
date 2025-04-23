@@ -1,5 +1,6 @@
 #include <pulp_cluster/cluster.h>
-
+#include "pulp_conv2d_fp32.h" // FIXME: this should not be here. quick fix for the typedef
+#include "pulp_train_utils_fp32.h"
 static void* im2col_pt_ = NULL;
 static void* pwt_pt_ = NULL;
 static DmaTransfer dma_transfer_;
@@ -309,7 +310,9 @@ void wait_pulp_nn_computation(MatchCtx* ctx){
     pi_team_offload_wait();
     #endif
 }
-
+/*
+    PULP-NN Wrapper
+*/
 void pulp_nn_dense_wrapper(void* args){
     MatchCtx* ctx = (MatchCtx*)args;
     MatchTensor* tensors = ctx->tensors->tensors;
@@ -560,6 +563,117 @@ void pulp_nn_add_wrapper(void* args){
     );
 }
 
+/*
+    PULP-TrainLib Wrapper
+*/
+void pulp_train_conv2d_fp32_wrapper(void* args){
+    MatchCtx* ctx = (MatchCtx*)args;
+    MatchTensor* tensors = ctx->tensors->tensors;
+    int num_ops = ctx->ops->num_ops;
+    int num_tensors = ctx->tensors->num_tensors;
+    int right_shift = ((MatchRightShiftAttrs*)ctx->ops->ops[num_ops-3].attrs)->right_shift;
+    MatchConv2DAttrs* conv_attrs = (MatchConv2DAttrs*)ctx->ops->ops[0].attrs;
+    // out
+    int out_width = tensors[num_tensors-1].tiles[L1_SCRATCHPAD*4+2].size; // out width
+    int out_height = tensors[num_tensors-1].tiles[L1_SCRATCHPAD*4+1].size; // out height
+    int out_ch = tensors[num_tensors-1].tiles[L1_SCRATCHPAD*4+3].size; // out ch
+    // inp
+    int inp_width = tensors[0].tiles[L1_SCRATCHPAD*4+2].size; // out width
+    int inp_height = tensors[0].tiles[L1_SCRATCHPAD*4+1].size; // out height
+    int inp_ch = tensors[0].tiles[L1_SCRATCHPAD*4+3].size; // out ch
+    // pad
+    int pad_top = match_get_pad_x_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+1]));
+    int pad_left = match_get_pad_x_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+2]));
+    int pad_bottom = match_get_pad_y_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+1]));
+    int pad_right = match_get_pad_y_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+2]));
+    #ifdef CLUSTER_LIB_DEBUG
+    printf("Out tile [%d %d %d] Inp tile [%d %d %d] pad ^ %d v %d < %d > %d\n", out_ch, out_height, out_width, inp_ch, inp_height, inp_width,
+            pad_top, pad_bottom, pad_left, pad_right);
+    printf("Num tensors: %d\n", num_tensors);
+    #endif
+
+
+    //inp_height, // input width
+    //inp_height, // input height
+    //inp_ch, // input channels
+    //out_width, // out width
+    //out_height, // out height
+    //out_ch, // out ch
+    //conv_attrs->kernel_size[1], // filter width
+    //conv_attrs->kernel_size[0], // filter height
+
+    // setup the arguments. FIXME: merge with the precedent
+    struct blob layer1_in, layer1_wgt, layer1_bias, layer1_out;
+
+    /* check if all the fields of the layers are assigned*/
+    layer1_in.data = tensors[0].pts[L1_SCRATCHPAD], // acts pt //INPUT;
+    layer1_in.dim = inp_height*inp_width*inp_ch;
+    layer1_in.W = inp_width;
+    layer1_in.H = inp_height;
+    layer1_in.C = inp_ch;
+  
+    layer1_out.data = tensors[num_tensors-1].pts[L1_SCRATCHPAD]; // output pt 
+    layer1_out.dim = out_height*out_width*out_ch;
+    layer1_out.W = out_width;
+    layer1_out.H = out_height;
+    layer1_out.C = out_ch;
+  
+    layer1_wgt.data = tensors[1].pts[L1_SCRATCHPAD]; // weights pt    
+    layer1_wgt.dim = conv_attrs->kernel_size[0]*conv_attrs->kernel_size[1]*inp_ch*out_ch;
+    layer1_wgt.W = conv_attrs->kernel_size[1];
+    layer1_wgt.H = conv_attrs->kernel_size[0];
+    layer1_wgt.C = inp_ch;
+  
+    layer1_bias.data = tensors[2].pts[L1_SCRATCHPAD]; // bias pt
+    layer1_bias.dim = out_ch;
+
+    int MATMUL_TYPE = 0;
+    int HWC_LAYOUT =0; // Choose if data layout is CHW (=0) or HWC (=1)
+
+    struct Conv2D_args C2D_args;
+    C2D_args.input = &layer1_in; // OK
+    C2D_args.coeff = &layer1_wgt; // OK
+    C2D_args.bias = &layer1_bias; // OK
+    C2D_args.output = &layer1_out; // OK
+    C2D_args.Lpad = pad_left; // OK
+    C2D_args.Rpad = pad_right; // OK
+    C2D_args.Upad = pad_top; // OK
+    C2D_args.Dpad = pad_bottom; // OK
+    C2D_args.stride_h = conv_attrs->strides[0]; // OK
+    C2D_args.stride_w = conv_attrs->strides[1]; // OK
+    C2D_args.i2c_buffer = im2col_pt_; // OK
+    C2D_args.bt_buffer = NULL; // transpose buffer : set to NULL for now
+    C2D_args.skip_wg_grad = 0;
+    C2D_args.skip_in_grad = 0;
+    C2D_args.HWC = HWC_LAYOUT;
+    C2D_args.opt_matmul_type_fw = MATMUL_TYPE;// OK - change later
+    C2D_args.opt_matmul_type_wg = MATMUL_TYPE;// OK 
+    C2D_args.opt_matmul_type_ig = MATMUL_TYPE;// OK
+    C2D_args.USE_IM2COL = 0; // IM2COL; set to 1 later
+    C2D_args.USE_DMA_IM2COL = 0; // OK checkme
+    C2D_args.USE_BIASES = 1; // OK checkme
+
+    pulp_conv2d_fp32_fw_cl(&C2D_args);
+
+    //(
+        /* Quantization parameters are not used */
+        //num_tensors>4? tensors[2].pts[L1_SCRATCHPAD]:NULL, // bnorm mul pt
+        //num_tensors>4? tensors[3].pts[L1_SCRATCHPAD]:NULL, // bnorm add pt
+        //1, // requant mult factor
+        //right_shift, // requant shift factor
+
+
+
+        //conv_attrs->strides[1], // stride width
+        //conv_attrs->strides[0], // stride height
+        //1, // activation is on
+        //num_tensors>4 // using bnorm or bias --> using bnorm on this pattern
+    //);
+}
+
+/*
+    Main Wrapper Function
+*/
 void pulp_nn_wrapper(MatchCtx* ctx){
     switch(ctx->pattern_name){
         case dense:
@@ -613,6 +727,11 @@ void pulp_nn_wrapper(MatchCtx* ctx){
             #endif
                 pulp_nn_add_wrapper, ctx);
             break;
+
+        case conv2d_train:
+            pulp_train_conv2d_fp32_wrapper(ctx);    
+            break;
+
         default:
             break;
     }
