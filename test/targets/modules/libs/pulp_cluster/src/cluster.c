@@ -4,11 +4,20 @@
 static void* im2col_pt_ = NULL;
 static void* pwt_pt_ = NULL;
 static DmaTransfer dma_transfer_;
+#ifndef GAP_SDK
+static void* pulp_open_l1_pt_ = NULL;
+#endif
 
 void offload_to_pulp_cluster(MatchCtx* ctx, void (inner_function)(unsigned int* args_inner_function),
                                 unsigned int* args){
+    #ifndef GAP_SDK
+    pulp_open_l1_pt_ = pmsis_l1_malloc(L1_SCRATCHPAD_SIZE);
+    #endif
     pi_cluster_task(&cluster_task,inner_function,args);
     pi_cluster_send_task_to_cl(&cluster_dev, &cluster_task);
+    #ifndef GAP_SDK
+    pmsis_l1_malloc_free( pulp_open_l1_pt_, L1_SCRATCHPAD_SIZE);
+    #endif
 }
 
 void cluster_lib_cleanup_dma_transfers(){
@@ -27,7 +36,11 @@ void cluster_lib_init(MatchCtx* ctx){
 }
 
 void* init_l1_scratchpad_memory(MatchCtx* ctx){
+    #ifdef GAP_SDK
     return pi_cl_l1_malloc(NULL, L1_SCRATCHPAD_SIZE);
+    #else
+    return pulp_open_l1_pt_;
+    #endif
 }
 
 void cluster_lib_cleanup(MatchCtx* ctx){
@@ -35,7 +48,9 @@ void cluster_lib_cleanup(MatchCtx* ctx){
 }
 
 void free_l1_scrachpad_memory(MatchCtx* ctx, void* l1_memory_pt){
+    #ifdef GAP_SDK
     pi_cl_l1_free(NULL, l1_memory_pt, L1_SCRATCHPAD_SIZE);
+    #endif
 }
 
 void* cluster_alloc_buffer(const char* name, int tensor_l1_pt, int size, int mem, int buffer_idx){
@@ -136,7 +151,7 @@ void handle_dma_transfer(
                     .loc = tensor_l1_pt,
                     .number_of_1d_copies = tensor->tiles[L1_SCRATCHPAD*3+0].size,
                     .length_1d_copy = tensor->tiles[L1_SCRATCHPAD*3+1].size*tensor->tiles[L1_SCRATCHPAD*3+2].size*tensor->bits/8,
-                    .stride_1d = tensor->tiles[L2_SHARED_MEM*3+1].size*tensor->tiles[L1_SCRATCHPAD*3+2].size*tensor->bits/8,
+                    .stride_1d = tensor->tiles[L2_SHARED_MEM*3+1].size*tensor->tiles[L2_SHARED_MEM*3+2].size*tensor->bits/8,
                     .dir = match_transfer_type==MATCH_SW_LOAD_TENSOR
                 });
             // fallback to 3D
@@ -174,7 +189,7 @@ void handle_dma_transfer(
                     .number_of_2d_copies = tensor->tiles[L1_SCRATCHPAD*4+1].size,
                     .number_of_1d_copies = tensor->tiles[L1_SCRATCHPAD*4+2].size,
                     .length_1d_copy = tensor->tiles[L1_SCRATCHPAD*4+3].size,
-                    .stride_2d = tensor->tiles[L2_SHARED_MEM*4+3].size*tensor->tiles[L1_SCRATCHPAD*4+2].size,
+                    .stride_2d = tensor->tiles[L2_SHARED_MEM*4+3].size*tensor->tiles[L2_SHARED_MEM*4+2].size,
                     .stride_1d = tensor->tiles[L2_SHARED_MEM*4+3].size,
                     .dir = 1
                 });
@@ -321,15 +336,15 @@ void pulp_nn_dense_wrapper(void* args){
     int right_shift = ((MatchRightShiftAttrs*)ctx->ops->ops[num_ops-3].attrs)->right_shift;
     pulp_nn_linear(
         // activations pt  
-        tensors[0].pts[L1_SCRATCHPAD], // acts pt
+        tensors[0].pt, // acts pt
         // bias pt
-        tensors[2].pts[L1_SCRATCHPAD], // bias pt
+        tensors[2].pt, // bias pt
         // output pt
-        tensors[num_tensors-1].pts[L1_SCRATCHPAD], // output pt
+        tensors[num_tensors-1].pt, // output pt
         // weights pt
-        tensors[1].pts[L1_SCRATCHPAD], // weights pt
-        num_tensors>4? tensors[2].pts[L1_SCRATCHPAD]:NULL, // bnorm mul pt
-        num_tensors>4? tensors[3].pts[L1_SCRATCHPAD]:NULL, // bnorm add pt
+        tensors[1].pt, // weights pt
+        num_tensors>4? tensors[2].pt:NULL, // bnorm mul pt
+        num_tensors>4? tensors[3].pt:NULL, // bnorm add pt
         1, // requant mult factor
         right_shift, // requant shift factor
         tensors[0].tiles[L1_SCRATCHPAD*2+1].size, // input channels
@@ -345,13 +360,13 @@ void pulp_nn_dense_out_int_wrapper(void* args){
     int num_tensors = ctx->tensors->num_tensors;
     pulp_nn_linear_out_32(
         // activations pt  
-        tensors[0].pts[L1_SCRATCHPAD], // acts pt
+        tensors[0].pt, // acts pt
         // bias pt
-        tensors[2].pts[L1_SCRATCHPAD], // bias pt
+        tensors[2].pt, // bias pt
         // output pt
-        tensors[num_tensors-1].pts[L1_SCRATCHPAD], // output pt
+        tensors[num_tensors-1].pt, // output pt
         // weights pt
-        tensors[1].pts[L1_SCRATCHPAD], // weights pt
+        tensors[1].pt, // weights pt
         tensors[0].tiles[L1_SCRATCHPAD*2+1].size, // input channels
         tensors[num_tensors-1].tiles[L1_SCRATCHPAD*2+1].size // output channels
     );
@@ -389,21 +404,21 @@ void pulp_nn_dw_conv2d_wrapper(void* args){
     #endif
     pulp_nn_depthwise_generic(
         // activations pt  
-        tensors[0].pts[L1_SCRATCHPAD], // acts pt
+        tensors[0].pt, // acts pt
         // im2col
         im2col_pt_,
         // bias pt
-        tensors[2].pts[L1_SCRATCHPAD], // bias pt
+        tensors[2].pt, // bias pt
         // output pt
-        tensors[num_tensors-1].pts[L1_SCRATCHPAD], // output pt
+        tensors[num_tensors-1].pt, // output pt
         // weights pt
-        tensors[1].pts[L1_SCRATCHPAD], // weights pt
+        tensors[1].pt, // weights pt
         pwt_pt_, // pwt buffer pt
-        num_tensors>4? tensors[2].pts[L1_SCRATCHPAD]:NULL, // bnorm mul pt
-        num_tensors>4? tensors[3].pts[L1_SCRATCHPAD]:NULL, // bnorm add pt
+        num_tensors>4? tensors[2].pt:NULL, // bnorm mul pt
+        num_tensors>4? tensors[3].pt:NULL, // bnorm add pt
         1, // requant mult factor
         right_shift, // requant shift factor
-        inp_height, // input width
+        inp_width, // input width
         inp_height, // input height
         inp_ch, // input channels
         out_width, // out width
@@ -449,20 +464,20 @@ void pulp_nn_pw_conv2d_wrapper(void* args){
     #endif
     pulp_nn_pointwise_HoWo_parallel(
         // activations pt  
-        tensors[0].pts[L1_SCRATCHPAD], // acts pt
+        tensors[0].pt, // acts pt
         // im2col
         im2col_pt_,
         // bias pt
-        tensors[2].pts[L1_SCRATCHPAD], // bias pt
+        tensors[2].pt, // bias pt
         // output pt
-        tensors[num_tensors-1].pts[L1_SCRATCHPAD], // output pt
+        tensors[num_tensors-1].pt, // output pt
         // weights pt
-        tensors[1].pts[L1_SCRATCHPAD], // weights pt
-        num_tensors>4? tensors[2].pts[L1_SCRATCHPAD]:NULL, // bnorm mul pt
-        num_tensors>4? tensors[3].pts[L1_SCRATCHPAD]:NULL, // bnorm add pt
+        tensors[1].pt, // weights pt
+        num_tensors>4? tensors[2].pt:NULL, // bnorm mul pt
+        num_tensors>4? tensors[3].pt:NULL, // bnorm add pt
         1, // requant mult factor
         right_shift, // requant shift factor
-        inp_height, // input width
+        inp_width, // input width
         inp_height, // input height
         inp_ch, // input channels
         out_width, // out width
@@ -508,20 +523,20 @@ void pulp_nn_hoparallel_conv2d_wrapper(void* args){
     #endif
     pulp_nn_conv_Ho_parallel(
         // activations pt  
-        tensors[0].pts[L1_SCRATCHPAD], // acts pt
+        tensors[0].pt, // acts pt
         // im2col
         im2col_pt_,
         // bias pt
-        tensors[2].pts[L1_SCRATCHPAD], // bias pt
+        tensors[2].pt, // bias pt
         // output pt
-        tensors[num_tensors-1].pts[L1_SCRATCHPAD], // output pt
+        tensors[num_tensors-1].pt, // output pt
         // weights pt
-        tensors[1].pts[L1_SCRATCHPAD], // weights pt
-        num_tensors>4? tensors[2].pts[L1_SCRATCHPAD]:NULL, // bnorm mul pt
-        num_tensors>4? tensors[3].pts[L1_SCRATCHPAD]:NULL, // bnorm add pt
+        tensors[1].pt, // weights pt
+        num_tensors>4? tensors[2].pt:NULL, // bnorm mul pt
+        num_tensors>4? tensors[3].pt:NULL, // bnorm add pt
         1, // requant mult factor
         right_shift, // requant shift factor
-        inp_height, // input width
+        inp_width, // input width
         inp_height, // input height
         inp_ch, // input channels
         out_width, // out width
@@ -552,9 +567,9 @@ void pulp_nn_add_wrapper(void* args){
     int out_ch = tensors[num_tensors-1].tiles[L1_SCRATCHPAD*4+3].size; // out ch
     pulp_nn_add(
         // activations pt  
-        tensors[0].pts[L1_SCRATCHPAD], // acts 1 pt
-        tensors[1].pts[L1_SCRATCHPAD], // acts 2 pt
-        tensors[num_tensors-1].pts[L1_SCRATCHPAD], // out
+        tensors[0].pt, // acts 1 pt
+        tensors[1].pt, // acts 2 pt
+        tensors[num_tensors-1].pt, // out
         1, // out mult 1
         1, // out mult 2
         right_shift,

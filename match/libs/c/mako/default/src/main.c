@@ -44,6 +44,15 @@ int main(int argc,char** argv){
         % endif
         &match_ctx);
     
+    % if handle_out_fn!="":
+    ${handle_out_fn}(
+        % for out_name in match_outputs.keys():
+        ${out_name}_pt,
+        ${match_outputs[out_name]["prod_shape"]},
+        % endfor
+        match_ctx.status);
+    % endif
+    
     % for out_name in match_outputs.keys():
     % if golden_cpu_model:
     ${target.free_fn}(golden_check_${out_name}_pt);

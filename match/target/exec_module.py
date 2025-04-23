@@ -191,7 +191,6 @@ class ExecModule(ABC):
         """
         return [
             # from lower level to higher level memories
-            MemoryInst(name="EXEC_MODULE_SCRATCHPAD_CACHE", k_bytes=EXEC_MODULE_SCRATCHPAD_CACHE_SIZE),
         ]
     
     def update_memories_for_pt(self, memories, pattern_name):
@@ -222,9 +221,9 @@ class ExecModule(ABC):
         if self.zigzag_optimal_spatial_mapping is None:
             self.zigzag_optimal_spatial_mapping = [ ("K",1), ]
 
-    def get_optimal_spat_size(self,optimal_spat:int=1,dim_size:int=1):
+    def get_optimal_spat_size(self,optimal_spat:int=1,dim=None):
         if optimal_spat==self.FULL_DIM:
-            return dim_size
+            return dim.size
         else:
             return optimal_spat   
     
@@ -234,7 +233,7 @@ class ExecModule(ABC):
         Returns:
             Class: class itself(not an instance) of the used cost model
         """
-        return ZigZagMatchCostModel if len(self.memories)>1 else ZigZagMatchNoTilingCostModel
+        return ZigZagMatchCostModel if len(self.module_memories())>0 else ZigZagMatchNoTilingCostModel
     
     def constrain_schedule(self, schedule: MatchSchedule=None, match_node: MatchNode=None):
         return schedule

@@ -16,12 +16,14 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         spatial_mapping,
         temporal_mapping,
         access_same_data_considered_as_no_access=True,
+        compute_constants_allocation=True,
+        has_any_additional_buffer=False,
     ):
         #MATCH cost model params
         self.MATCH_ITERATION_LATENCY = 300 # TODO: profile MATCH latency
         self.MATCH_EXECUTIONAL_MODEL_ITERATION_LATENCY = 200 # default value
-        self.COMPUTE_CONSTANTS_ALLOCATION = True
-        self.HAS_ANY_ADDITIONAL_BUFFER = True
+        self.COMPUTE_CONSTANTS_ALLOCATION = compute_constants_allocation
+        self.HAS_ANY_ADDITIONAL_BUFFER = has_any_additional_buffer
         temporal_mapping_dict=temporal_mapping.mapping_dic_stationary
         operands_=temporal_mapping.operand_list
         constrained_temporal_mapping_dict,valid=self.adjust_temporal_mapping(temporal_mapping_dict,operands_,layer)
@@ -205,7 +207,7 @@ class ZigZagMatchCostModel(CostModelEvaluation):
                 mem_bytes-=prod([val[0] for val in self.size_per_mem_level[operand].values()])
         
         for w_tensor in self.match_node.const_tensors.values():
-            if w_tensor!=self.layer.layer_attrs["w_tensor"]:
+            if self.layer.layer_attrs["w_tensor"] is not None and w_tensor!=self.layer.layer_attrs["w_tensor"]:
                 mem_bytes-=w_tensor.prod_shape_int*w_tensor.dtype.itemsize
         
         if mem_bytes<0:
@@ -266,6 +268,14 @@ class ZigZagMatchNoTilingCostModel(ZigZagMatchCostModel):
             accelerator=accelerator,layer=layer,spatial_mapping=spatial_mapping,
             temporal_mapping=temporal_mapping,
             access_same_data_considered_as_no_access=access_same_data_considered_as_no_access)
+        # we consider no cost at all for no tiling schedules
+        self.match_overall_latency = 0
+        self.energy_total = 0
+        self.MAC_energy = 0
+        self.mem_energy = 0
+        self.latency_total2 = 0
+        self.latency_total1 = 0
+        self.latency_total0 = 0
         
     def adjust_temporal_mapping(self, temporal_mapping_dict, operand_list, layer):
         return temporal_mapping_dict,True

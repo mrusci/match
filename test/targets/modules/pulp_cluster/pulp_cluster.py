@@ -29,6 +29,7 @@ class PulpCluster(ExecModule):
         self.L2_SHARED_MEM_KB_SIZE = l2_kb_size
         self.L3_FLASH_KB_SIZE = l3_kb_size
         self.ASYNC_DMA = async_dma
+        # self.schedule_engine = "basic"
 
     def def_include_list(self):
         return ["pulp_cluster/cluster"]
@@ -72,7 +73,7 @@ class PulpCluster(ExecModule):
 
     def update_constants(self, match_node: MatchNode=None, pattern_name: str="conv2d"):
         for w_tensor in match_node.const_tensors.values():
-            if "dense" in w_tensor.name:
+            if "dense" in w_tensor.name and pattern_name=="flatten_dense_out":
                 if w_tensor.layout!="CN":
                     w_tensor.data = w_tensor.data.transpose(1,0)
                     w_tensor.dims = [w_tensor.dims[1], w_tensor.dims[0]]
@@ -141,7 +142,7 @@ class PulpCluster(ExecModule):
                 wildcard(), wildcard()
             )
             conv2d = is_op("cast")(conv2d) | conv2d
-            bias_add = is_op("nn.bias_add")(conv2d, wildcard())
+            bias_add = is_op("nn.bias_add")(conv2d, wildcard()) | is_op("add")(conv2d, wildcard())
             scale = is_op("multiply")(conv2d, wildcard()) | is_op("multiply")(wildcard(), conv2d)
             bias = is_op("add")(scale, wildcard()) | is_op("add")(wildcard(), scale)
             right_shift = is_op("right_shift")(bias_add | bias, is_constant())
@@ -156,7 +157,7 @@ class PulpCluster(ExecModule):
                 wildcard(), wildcard()
             )
             dense = is_op("cast")(dense) | dense
-            bias_add = is_op("nn.bias_add")(dense, wildcard())
+            bias_add = is_op("nn.bias_add")(dense, wildcard()) | is_op("add")(dense, wildcard())
             scale = is_op("multiply")(dense, wildcard()) | is_op("multiply")(wildcard(), dense)
             bias = is_op("add")(scale, wildcard()) | is_op("add")(wildcard(), scale)
             right_shift = is_op("right_shift")(bias_add | bias, is_constant())
@@ -166,7 +167,7 @@ class PulpCluster(ExecModule):
 
         def dense_pt_out():
             dense = is_op("nn.dense")(
-                    wildcard(), wildcard()
+                wildcard(), wildcard()
             )
             add = is_op("add")(dense, is_constant()) | is_op("add")(is_op("cast")(dense),is_constant())
             return add
@@ -176,15 +177,10 @@ class PulpCluster(ExecModule):
             cast_b = is_op("cast")(wildcard())
             add = is_op("add")(cast_a, cast_b)
             # pattern cast cast add clip cast cast multiply right shift cast
-            clip = is_op("clip")(add)
-            cast_c = is_op("cast")(clip)
-            cast_d = is_op("cast")(cast_c)
-            mul = is_op("multiply")(is_constant(),cast_d)
+            mul = is_op("multiply")(is_constant(), add) | is_op("multiply")(add, is_constant())
             rshift = is_op("right_shift")(mul, is_constant())
-            # pattern cast cast add right shif clip cast
-            rshift_clip = is_op("clip")(is_op("right_shift")(add,is_constant()))
             # cast for both paths
-            pt = is_op("cast")(rshift | rshift_clip)
+            pt = is_op("cast")(is_op("clip")(rshift))
             return pt
 
         def only_out_uint8(node):

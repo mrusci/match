@@ -160,6 +160,7 @@ class MatchTarget(ABC):
             "golden_cpu_model":models_[default_model].golden_cpu_model,
             "benchmarking":models_[default_model].benchmark_model,
             "bench_iterations":int(models_[default_model].benchmark_model),
+            "handle_out_fn":models_[default_model].handle_out_fn,
             "app":"match",
         }
         with open(abs_out_path+f"/include/{default_model}/default_inputs.h","w") as inp_file:
@@ -301,6 +302,8 @@ class MatchTarget(ABC):
         print(f"-------------------\n[PATTERN MATCHER] Node matched pattern {match_pt.name}, checking additional conditions")
         # is pattern fully supported?
         # node_add_checks = tvm.relay.transform.InferType()(tvm.ir.IRModule().from_expr(match_pt.pattern().partition(node)))["main"].body.op.body
+        if not isinstance(node, tvm.relay.Call):
+            print(f"[PATTERN MATCHER] Node is not a call, weird behaviour")
         node_add_checks = node
         if match_pt.additional_checks(node_add_checks):
             # if supported get latency and energy of pattern
@@ -308,7 +311,9 @@ class MatchTarget(ABC):
                 latency,energy=self.evaluate_pattern(node,match_pt)
                 print(f"[PATTERN MATCHER] Node is supported by {match_pt.name} with expected latency {latency} and expected energy {energy}")
             except Exception as exc:
+                breakpoint()
                 print(f"[PATTERN MATCHER] Node failed to be evaluated with pattern {match_pt.name}")
+                breakpoint()
                 return False
             # check all the patterns that are after me
             for other_pt in self.match_patterns[match_pt.idx+1:]:
@@ -325,6 +330,7 @@ class MatchTarget(ABC):
                             print(f"[PATTERN MATCHER] Node is also supported by {other_pt.name} with expected latency {other_pt_latency} and expected energy {other_pt_energy}\n")
                         except Exception as exc:
                             print(f"[PATTERN MATCHER] Node failed to be evaluated with pattern {other_pt.name}")
+                            breakpoint()
                             continue
                         # if the result gathered by this other matching pattern is better break all
                         # this is due to the fact that this pattern will be matched later and finally

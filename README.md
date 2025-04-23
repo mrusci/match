@@ -5,7 +5,7 @@
 ---
 **MATCH** (**M**odel-**A**ware **T**VM-based **C**ompiler for **H**eterogeneous hardware) is a DNN compiler that exploits [Apache TVM](https://tvm.apache.org/)'s BYOC framework, targeting the optimized deployment of DNN applications onto heterogeneous edge System-on-Chip (SoC) platforms.
 
-MATCH partitions a DNN isolating (or _matching_) patterns supported by each hardware module in the target system. It then manages the compilation process for layers supported by the available accelerators, and exploits the baseline TVM to generate code for unsupported layers on the main host core. Compilation in MATCH is guided by a temporal mapping engine, which searches for the optimal schedule (i.e. loop ordering and memory allocation) of each layer. MATCH currently supports [ZigZag](https://github.com/KULeuven-MICAS/zigzag) as the default temporal mapping engine. At the end of the compilation process, MATCH produces C code to execute all layers of the network, which users can invoke from their own "main" program to implement a complete inference.
+MATCH partitions a DNN isolating (or _matching_) patterns supported by each executional module in the target system. It then manages the compilation process for nodes supported by the available accelerators, and exploits the baseline TVM to generate code for unsupported nodes on the main host core. Compilation in MATCH is guided by a temporal mapping engine, which searches for the optimal schedule (i.e. loop ordering and memory allocation) of each layer. MATCH currently supports [ZigZag](https://github.com/KULeuven-MICAS/zigzag) as the default temporal mapping engine. At the end of the compilation process, MATCH produces C code to execute all nodes of the network, which users can invoke from their own "main" program to implement a complete inference.
 
 Currently, MATCH supports the following targets:
 - [DIANA](https://ieeexplore.ieee.org/document/9731716), a multi-accelerator SoC by KU Leuven.
@@ -17,18 +17,38 @@ Importantly, MATCH is designed to make the process of supporting new targets as 
 
 If you use MATCH, please acknowledge our paper:
 ```
-@misc{hamdi2024matchmodelawaretvmbasedcompilation,
-      title={MATCH: Model-Aware TVM-based Compilation for Heterogeneous Edge Devices}, 
-      author={Mohamed Amine Hamdi and Francesco Daghero and Giuseppe Maria Sarda and Josse Van Delm and Arne Symons and Luca Benini and Marian Verhelst and Daniele Jahier Pagliari and Alessio Burrello},
-      year={2024},
-      eprint={2410.08855},
-      archivePrefix={arXiv},
-      primaryClass={cs.DC},
-      url={https://arxiv.org/abs/2410.08855}, 
-}
+@ARTICLE{10946988,
+
+  author={Hamdi, Mohamed Amine and Daghero, Francesco and Sarda, Giuseppe Maria and Delm, Josse Van and Symons, Arne and Benini, Luca and Verhelst, Marian and Pagliari, Daniele Jahier and Burrello, Alessio},
+
+  journal={IEEE Transactions on Computer-Aided Design of Integrated Circuits and Systems}, 
+
+  title={MATCH: Model-Aware TVM-Based Compilation for Heterogeneous Edge Devices}, 
+
+  year={2025},
+
+  volume={},
+
+  number={},
+
+  pages={1-1},
+
+  keywords={Hardware;Artificial neural networks;Artificial intelligence;Memory management;Tensors;Design automation;Single instruction multiple data;Integrated circuit modeling;Computational modeling;Pattern matching;AI Compilers;Deep Neural Networks;Heterogeneous Computing;Deep Learning Accelerators},
+
+  doi={10.1109/TCAD.2025.3556967}}
+
 ```
 
-# Requirements
+# Docker
+
+The easiest way to use MATCH is through a Ubuntu22.04 docker container, which ensures all dependencies (especially for TVM) are met. This can be achieved with:
+```
+$ docker build -t match -f docker/Dockerfile .
+$ docker start -it --rm match
+```
+
+# Local Installation
+## Requirements
 These instructions will consider a Ubuntu installation including:
 - LLVM
 - a C++ compiler with C++17 support, like GCC 7.1 or Clang 5.0
@@ -36,15 +56,11 @@ These instructions will consider a Ubuntu installation including:
 - python3
 - pip3
 
-This can be achieved with
+This can be achieved by running the following command on a fresh Ubuntu 22.04 install:
 
 ```
-$ sudo apt install -y llvm cmake python3 python3-pip 
+$ xargs -a system_requirements.txt sudo apt install -y
 ```
-
-A fresh install of Ubuntu 22.04 should satify all requirements.
-
-# Installation
 To install the latest release (with pip):
 
 ```
@@ -52,10 +68,12 @@ $ git clone --recursive https://github.com/eml-eda/match
 $ cd match
 $ python3 -m venv venv
 $ source venv/bin/activate
-$ make all
+$ pip3 install -r requirements.txt
+$ TVM_NCORES_INSTALL=$(nproc) make build_tvm
+$ python3 setup.py install
 ```
 
-When using a new fresh terminal, users can run `source sourceme.sh` on the repository to correctly set the environment. 
+Due to some environment dependencies it is reccomended to either set the correct environment running `source sourceme.sh` on the new terminal or by exporting directly on the user .bashrc the correct environment. 
 
 # Usage
 
@@ -64,7 +82,7 @@ To use MATCH directly, the end user can execute the run.py script, setting the t
 Considering an ONNX network the user that should be compiled for a pulp platform, the user shall execute the following command
 
 ```
-$ python3 match/test.py --model onnx image_classification --executor graph
+$ python3 test/test.py --model onnx image_classification --executor graph
 ```
 
 <!--Additionally there are 2 predefined networks, that can be used to test a newly built target, that can be accessed from MATCH directly.
@@ -112,7 +130,7 @@ match.match(
 To define a new target (i.e.,  a new heterogeneous SoC), users shall extend the `MatchTarget` class.
 The extension process is quite simple, since the only thing that the user must provide is a list of _execution modules_, passed to the constructor of the base `MatchTarget` class.
 Additionally with the host memory hierarchy definition and a set of paths and APIs.
-Execution modules are classes that represent all hardware modules in the target SoC that MATCH should consider to implement the inference of DNN layers, except for the main host CPU (which is handled by TVM). So, execution modules might include GPUs, dataflow accelerators, slave CPU clusters, etc.
+Execution modules are classes that represent all hardware modules in the target SoC that MATCH should consider to implement the inference of DNN nodes, except for the main host CPU (which is handled by TVM). So, execution modules might include GPUs, dataflow accelerators, slave CPU clusters, etc.
 
 For example to define a target SoC which contains a digital accelerator and an analog one, a user could use the following code:
 ```python
@@ -239,10 +257,9 @@ To guide the temporal mapping engine, the user shall provide a customized cost m
 
 Importantly, `def_transfer_cost` is always called prior to `def_innermost_loops_cost`, so the user can set some parameters in the former, and use them later for the loops cost calculation.
 
-For example, the following code defines the cost model of an accelerator, for which each transfer has an overhead of 100 cycles w.r.t. the cycles lost on the transfer itself, and where the number of cycles lost on the innemorst computations equals to the nunmber of output channels("K"):
+For example, the following code defines the cost model of an accelerator, for which each transfer has an overhead of 100 cycles w.r.t. the cycles lost on the transfer itself, and where the number of cycles lost on the innemorst computations equals to 10000:
 ```python
-from match.target.cost_model import ZigZagMatchCostModel
-from math import prod,ceil,floor
+from match.cost_model.zigzag import ZigZagMatchCostModel
 
 class ExampleCostModel(ZigZagMatchCostModel):
     def __init__(
@@ -257,13 +274,20 @@ class ExampleCostModel(ZigZagMatchCostModel):
         super(ExampleCostModel,self).__init__(
             accelerator=accelerator,layer=layer,spatial_mapping=spatial_mapping,
             temporal_mapping=temporal_mapping,
-            access_same_data_considered_as_no_access=access_same_data_considered_as_no_access)
+            access_same_data_considered_as_no_access=access_same_data_considered_as_no_access,
+            has_any_additional_buffer=True
+        )
     
     def def_transfer_cost(self):
-        return {operand:input_transfer_costs[operand][0]+100 if operand!="O" else self.self.output_transfer_costs[0]+100 for operand in self.operands}
+        return {operand:100 for operand in self.operands}
     
     def def_innermost_loops_cost(self):
-        return self.loop_sizes['K']
+        return 10000
+
+class ExampleDigitalModule(ExecModule):
+    ...
+    def zigzag_cost_model(self):
+        return ExampleCostModel
 ```
 
 More detailed examples can be found in [Cost Model Docs](docs/dev/cost_model.md)

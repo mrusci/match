@@ -45,7 +45,12 @@ def create_dense_conv_dense_ex(inp_features:int=256,out_features:int=128,
     # define operations
     x = relay.op.nn.dense(x, w_1, out_dtype=bias_1.dtype)
     x = relay.op.nn.bias_add(x, b_1, axis=-1)
-    x = relay.op.nn.relu(x)
+    if requant_pattern:
+        x = relay.op.right_shift(x, relay.const(right_shift))
+        x = relay.op.clip(x, a_min=0, a_max=255)
+        x = relay.op.cast(x, "uint8")
+    else:
+        x = relay.op.nn.relu(x)
     x = relay.op.cast(x, "uint8")
     x = relay.op.reshape(x, (1, out_features)+inp_shape)
     x = relay.op.nn.conv2d(x, w_2,
@@ -56,11 +61,21 @@ def create_dense_conv_dense_ex(inp_features:int=256,out_features:int=128,
                            out_dtype="int32",
                            )
     x = relay.op.nn.bias_add(x, b_2, axis=1)
-    x = relay.op.nn.relu(x)
+    if requant_pattern:
+        x = relay.op.right_shift(x, relay.const(right_shift))
+        x = relay.op.clip(x, a_min=0, a_max=255)
+        x = relay.op.cast(x, "uint8")
+    else:
+        x = relay.op.nn.relu(x)
     x = relay.op.reshape(x, (1, inp_features*math.prod([int(inp_shape[idx]/strides[idx]) for idx in range(len(inp_shape))])))
     x = relay.op.nn.dense(x, w_3, out_dtype=bias_3.dtype)
     x = relay.op.nn.bias_add(x, b_3, axis=-1)
-    x = relay.op.nn.relu(x)
+    if requant_pattern:
+        x = relay.op.right_shift(x, relay.const(right_shift))
+        x = relay.op.clip(x, a_min=0, a_max=255)
+        x = relay.op.cast(x, "uint8")
+    else:
+        x = relay.op.nn.relu(x)
     # create an IR module from the relay expression
     mod = tvm.ir.IRModule()
     mod = mod.from_expr(x)
@@ -302,6 +317,44 @@ def create_densemlp_fp_vit(div_out_chs_by:int=1, out_ch:int=197, inp_size: int =
     x = relay.op.nn.dense(x,weights_2_v)
     add_2_v = relay.var(add_2_name, relay.TensorType(add_2_c.shape, add_2_c.dtype))
     x = relay.op.add(x,add_2_v)
+    # create an IR module from the relay expression
+    mod = tvm.ir.IRModule()
+    mod = mod.from_expr(x)
+    return mod, params
+
+def create_easy_dense_int32_ex(inp_features: int=48, out_features: int=16, **kwargs):
+    # Using input_0 to be used with create_demo_file
+    x = relay.var("input_0", relay.TensorType((1,inp_features), "int32"))
+    # define weights and bias variables
+    num_nodes = (inp_features//out_features) -1
+    weights = []
+    biases = []
+    weights_names = []
+    biases_names = []
+    weights_vars = []
+    biases_vars = []
+    params = {}
+    for idx in range(num_nodes):
+        dense_weights = create_random_array((inp_features/(idx+2),inp_features/(idx+1)),"int32")
+        dense_bias = create_random_array((inp_features/(idx+2),),"int32")
+        dense_weights_name = f"dense_{idx}_weights"
+        dense_bias_name = f"dense_{idx}_bias"
+        weights.append(dense_weights)
+        biases.append(dense_bias)
+        weights_names.append(dense_weights_name)
+        biases_names.append(dense_bias_name)
+        weights_vars.append(relay.var(dense_weights_name, relay.TensorType(dense_weights.shape, dense_weights.dtype)))
+        biases_vars.append(relay.var(dense_bias_name, relay.TensorType(dense_bias.shape, dense_bias.dtype)))
+        params[dense_weights_name] = dense_weights
+        params[dense_bias_name] = dense_bias
+
+    # define operations
+    for idx in range(num_nodes):
+        x = relay.op.nn.dense(x, weights_vars[idx])
+        x = relay.op.nn.bias_add(x, biases_vars[idx], axis=-1)
+        x = relay.op.nn.relu(x)
+    
+    # x = relay.op.nn.softmax(x)
     # create an IR module from the relay expression
     mod = tvm.ir.IRModule()
     mod = mod.from_expr(x)

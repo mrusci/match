@@ -16,6 +16,8 @@
 """
 Operations to support a MATCH Target with one or more ExecModule.
 """
+from match.transform.cast import MatchRemoveFakeOutDtypeCasts
+from match.transform.dead import MatchRemoveIdentityBYOC
 from match.transform.naming import MatchRenameIO
 from match.transform.save import MatchSaveModule, MatchSaveRelay
 from match.utils.utils import get_model_name
@@ -72,12 +74,25 @@ def partition(mod, params, dpu, opts):
     pipeline.append(MatchRenameIO())
     pipeline.append(MatchSaveRelay("renamed"))
     pipeline.append(transform.InferType())
+    # TODO: understand if current broadcast rel of outdtype is fixed with new releases
+    # currently its not working completely as expected
+    # conv(outdtype="int32") -> multiply() -> add() breaks in TVM when building
+    # this doesnt happen with conv(outdtype="int32") -> biasadd
+    # now this pass does this --> conv() --> cast(outdtype="int32") -> multiply() -> add() 
+    # to -->conv(outdtype="int32") --> cast(outdtype="int32") --> multiply() -> add()
+    pipeline.append(MatchRemoveFakeOutDtypeCasts())
+    pipeline.append(transform.InferType())
+    pipeline.append(MatchSaveRelay("removed_fake_casts"))
 
+    pipeline.append(transform.InferType())
     for net_transform_name, net_transform in target.transform_before_partitioning(opts):
         pipeline.append(net_transform)
         pipeline.append(MatchSaveRelay(net_transform_name))
         pipeline.append(transform.InferType())
 
+    pipeline.append(transform.FoldConstant())
+    pipeline.append(MatchSaveRelay("folded"))
+    pipeline.append(transform.InferType())
     pipeline.append(MatchSaveRelay("transformed"))
     pipeline.append(transform.MergeComposite(pattern_table(target=target)))
     pipeline.append(transform.AnnotateTarget(["match"]))
@@ -92,6 +107,11 @@ def partition(mod, params, dpu, opts):
     pipeline.append(transform.PartitionGraph(get_model_name()))
     pipeline.append(transform.InferType())
     pipeline.append(MatchSaveRelay("partitioned"))
+    
+    pipeline.append(MatchRemoveIdentityBYOC())
+    pipeline.append(transform.DeadCodeElimination())
+    pipeline.append(transform.RemoveUnusedFunctions())
+    pipeline.append(MatchSaveRelay("cleaned"))
     
     pipeline.append(MatchSaveModule())
     seq = tvm.transform.Sequential(pipeline)

@@ -11,14 +11,13 @@
             "program": "${workspaceFolder}/test/test.py",
             "args": [
                 "--executor"
-                ,"graph"
-                // "--model",
-                // "drone_vfe",
-                ,"--microbench"
-                ,"conv"
-                ,"--golden"
-                // ,"--target"
-                // ,"GAP9"
+                , "graph"
+                , "--model"
+                , "yolo_pruned"
+                // , "--microbench"
+                // , "dense"
+                , "--target"
+                , "pulp_open"
             ],
             "console": "integratedTerminal",
             "justMyCode": false

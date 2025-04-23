@@ -25,7 +25,7 @@ int match_${model_name}_run_graph(
     ${rt_i.c_type}* ${rt_i.name}_pt,
     % endfor
     % for rt_o_idx,rt_o in enumerate(rt_outputs):
-    ${"" if rt_o_idx==0 else ","}${rt_o.c_type}* ${rt_o.name}_pt
+    ${"" if rt_o_idx==0 else ", "}${rt_o.c_type}* ${rt_o.name}_pt
     % endfor
 ){
     % if ext_mem_needed_bytes>0:
@@ -51,7 +51,24 @@ int match_${model_name}_run_graph(
     void* ${mem_tensor.name}_pt = ${mem_tensor.name}_data_;
     % endif
     % endfor
+    % for mem_tensor in mem_tensors:
+    % if (mem_tensor.is_input or mem_tensor.is_output) and (mem_tensor.stored_in_external_memory):
+    void* ${mem_tensor.name}_ext_pt = match_ext_mem+ext_mem_offset;
+    ext_mem_offset += ${mem_tensor.elems * mem_tensor.dtype.itemsize};
+    ${target.load_file_to_ext_mem_fn}(${mem_tensor.name}_pt, ${mem_tensor.name}_ext_pt, ${mem_tensor.elems * mem_tensor.dtype.itemsize});
+    ${mem_tensor.name}_pt = match_mem+${mem_tensor.mem_offset};
+    % endif
+    % endfor
     % for node in nodes:
+    #if __${model_name}_GRAPH_DEBUG__
+    % if node.fallback:
+    #if __${model_name}_FALLBACK_GRAPH_DEBUG__
+    % endif
+    printf("[${model_name} GRAPH] Running ${'TVM' if node.fallback else 'MATCH'} node ${node.name}\n");
+    % if node.fallback:
+    #endif
+    % endif
+    #endif
     % for mem_tensor in mem_tensors:
     % if node.node_id in mem_tensor.move_temp_to_ext_mem:
     ${target.load_to_ext_mem_fn}(${mem_tensor.name}_pt, ${mem_tensor.name}_ext_pt,${mem_tensor.elems * mem_tensor.dtype.itemsize});
@@ -97,6 +114,15 @@ int match_${model_name}_run_graph(
         )
     ) return -1;
     % endif
+    #if __${model_name}_GRAPH_DEBUG__
+    % if node.fallback:
+    #if __${model_name}_FALLBACK_GRAPH_DEBUG__
+    % endif
+    printf("[${model_name} GRAPH] ${'TVM' if node.fallback else 'MATCH'} node ${node.name} done, output differs from checksum by %d\n", match_byte_checksum_check(${node.outputs[0].name}_pt, __${model_name}_GRAPH_${node.name}_BYTES__, __${model_name}_GRAPH_${node.name}_CHECKSUM__));
+    % if node.fallback:
+    #endif
+    % endif
+    #endif
     % endfor
     // final cleanup
     % if mem_needed_bytes>0:

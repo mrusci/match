@@ -1,7 +1,10 @@
 # TVM imports
+from tvm import relay
 from match.codegen.template_writer import TemplateWriter
+from match.utils.utils import add_fname_node_schedule
 import tvm
 from match.target import get_target
+import tvm.relay
 
 def schedule_to_code(mod: tvm.ir.IRModule,exec_module_name:str="",pattern_name:str=""):
     target=get_target()
