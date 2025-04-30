@@ -69,7 +69,7 @@ class PulpOpen(MatchTarget):
     def network_transformations(self, opts):
         return [
             ("requant", MatchRequantRewriter()),
-            ("layout", MatchLayoutNCHWtoNHWCTVM),
+            #("layout", MatchLayoutNCHWtoNHWCTVM),
         ]
     
     def host_memories(self):
