@@ -78,6 +78,8 @@ class PulpCluster(ExecModule):
                     w_tensor.data = w_tensor.data.transpose(1,0)
                     w_tensor.dims = [w_tensor.dims[1], w_tensor.dims[0]]
                 w_tensor.layout = "CN"
+            elif pattern_name == "conv2d_train":
+                pass
             elif "conv2d" in w_tensor.name:
                 if w_tensor.layout=="HWIO":
                     w_tensor.data = w_tensor.data.transpose(3,0,1,2)
@@ -103,6 +105,10 @@ class PulpCluster(ExecModule):
             elif pattern_name=="depthwise_conv2d":
                 # CORES * (ks[0] * (tile_n_in + p[0] + p[2]) + ks[0])
                 im2col_size_l1 = self.NUM_CORES * (filter_shape[0] * (tile_inp_chs + padding[0] + padding[2]) + filter_shape[0])
+            elif pattern_name=="conv2d_train":
+                # size in bytea
+                pass
+
             if im2col_size_l1:
                 schedule.buffers.append(MatchMemBuffer(name="im2col", mem_name="L1_SCRATCHPAD",
                                                    num_bytes=im2col_size_l1))
@@ -229,7 +235,7 @@ class PulpCluster(ExecModule):
                 wildcard(), wildcard()
             )
             conv2d = is_op("cast")(conv2d) | conv2d
-            bias_add = is_op("nn.bias_add")(conv2d, wildcard())
+            bias_add = is_op("nn.bias_add")(conv2d, wildcard()) | is_op("add")(conv2d, wildcard())
             return bias_add
 
         # checks for training

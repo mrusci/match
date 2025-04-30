@@ -588,19 +588,41 @@ void pulp_train_conv2d_fp32_wrapper(void* args){
     int num_tensors = ctx->tensors->num_tensors;
     int right_shift = ((MatchRightShiftAttrs*)ctx->ops->ops[num_ops-3].attrs)->right_shift;
     MatchConv2DAttrs* conv_attrs = (MatchConv2DAttrs*)ctx->ops->ops[0].attrs;
-    // out
-    int out_width = tensors[num_tensors-1].tiles[L1_SCRATCHPAD*4+2].size; // out width
-    int out_height = tensors[num_tensors-1].tiles[L1_SCRATCHPAD*4+1].size; // out height
-    int out_ch = tensors[num_tensors-1].tiles[L1_SCRATCHPAD*4+3].size; // out ch
-    // inp
-    int inp_width = tensors[0].tiles[L1_SCRATCHPAD*4+2].size; // out width
-    int inp_height = tensors[0].tiles[L1_SCRATCHPAD*4+1].size; // out height
-    int inp_ch = tensors[0].tiles[L1_SCRATCHPAD*4+3].size; // out ch
-    // pad
-    int pad_top = match_get_pad_x_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+1]));
-    int pad_left = match_get_pad_x_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+2]));
-    int pad_bottom = match_get_pad_y_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+1]));
-    int pad_right = match_get_pad_y_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+2]));
+    
+    int out_width, out_height, out_ch;
+    int inp_width, inp_height, inp_ch;
+    int pad_top, pad_bottom, pad_left, pad_right;
+
+    if (conv_attrs->data_layout == "NCHW"){
+        // out chw
+        out_width = tensors[num_tensors-1].tiles[L1_SCRATCHPAD*4+3].size; // out width
+        out_height = tensors[num_tensors-1].tiles[L1_SCRATCHPAD*4+2].size; // out height
+        out_ch = tensors[num_tensors-1].tiles[L1_SCRATCHPAD*4+1].size; // out ch
+        // inp chw
+        inp_width = tensors[0].tiles[L1_SCRATCHPAD*4+3].size; // out width
+        inp_height = tensors[0].tiles[L1_SCRATCHPAD*4+2].size; // out height
+        inp_ch = tensors[0].tiles[L1_SCRATCHPAD*4+1].size; // out ch
+        // pad
+        pad_top = match_get_pad_x_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+2]));
+        pad_left = match_get_pad_x_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+3]));
+        pad_bottom = match_get_pad_y_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+2]));
+        pad_right = match_get_pad_y_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+3]));
+    
+    } else {
+        // out hwc
+        out_width = tensors[num_tensors-1].tiles[L1_SCRATCHPAD*4+2].size; // out width
+        out_height = tensors[num_tensors-1].tiles[L1_SCRATCHPAD*4+1].size; // out height
+        out_ch = tensors[num_tensors-1].tiles[L1_SCRATCHPAD*4+3].size; // out ch
+        // inp hwc
+        inp_width = tensors[0].tiles[L1_SCRATCHPAD*4+2].size; // out width
+        inp_height = tensors[0].tiles[L1_SCRATCHPAD*4+1].size; // out height
+        inp_ch = tensors[0].tiles[L1_SCRATCHPAD*4+3].size; // out ch        
+        // pad
+        pad_top = match_get_pad_x_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+1]));
+        pad_left = match_get_pad_x_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+2]));
+        pad_bottom = match_get_pad_y_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+1]));
+        pad_right = match_get_pad_y_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+2]));
+    }
     #ifdef CLUSTER_LIB_DEBUG
     printf("Out tile [%d %d %d] Inp tile [%d %d %d] pad ^ %d v %d < %d > %d\n", out_ch, out_height, out_width, inp_ch, inp_height, inp_width,
             pad_top, pad_bottom, pad_left, pad_right);
@@ -638,12 +660,11 @@ void pulp_train_conv2d_fp32_wrapper(void* args){
     layer1_wgt.W = conv_attrs->kernel_size[1];
     layer1_wgt.H = conv_attrs->kernel_size[0];
     layer1_wgt.C = inp_ch;
-  
     layer1_bias.data = tensors[2].pts[L1_SCRATCHPAD]; // bias pt
     layer1_bias.dim = out_ch;
 
     int MATMUL_TYPE = 0;
-    int HWC_LAYOUT =0; // Choose if data layout is CHW (=0) or HWC (=1)
+    int HWC_LAYOUT = 1 - (conv_attrs->data_layout == "NCHW"); // Choose if data layout is CHW (=0) or HWC (=1)
 
     struct Conv2D_args C2D_args;
     C2D_args.input = &layer1_in; // OK
