@@ -67,8 +67,10 @@ class MatchTVMGraphRuntime:
         heads = [head[0] for head in self.mod_info["heads"]]
         nop_maps = dict()
         activations = dict()
+        dtype_activations = dict()
         for match_inp in self.match_inputs.values():
             activations[match_inp["name"]] = match_inp["np_values"]
+            dtype_activations[match_inp["name"]] = match_inp["np_values"].dtype
         for node_id,node in enumerate(self.mod_info["nodes"]):
             if node["op"]=="null":
                 # input or parameter
@@ -171,6 +173,9 @@ class MatchTVMGraphRuntime:
                     module.run()
                     output_np = module.get_output(0).numpy()
                     activations[mem_tensor.name] = output_np
+                
+                # type of the activation output
+                dtype_activations[mem_tensor.name] = mem_tensor.dtype
                 mem_tensors.append(mem_tensor)
                 tensor_map[node["name"]+"_out"] = mem_tensor
                 outputs = [mem_tensor]
@@ -237,6 +242,6 @@ class MatchTVMGraphRuntime:
             "rt_outputs": outputs,
             "activations": activations,
             "map_names": map_names,
-            "checksums": {activation_name: np.frombuffer(activation.flatten().tobytes(),dtype="uint8").sum() for activation_name, activation in activations.items()},
+            "checksums": checksums,
         }
         return template_data
