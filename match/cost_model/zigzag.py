@@ -217,7 +217,7 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         lowest_var_mem = self.mem_hierarchy_dict[var_mem_key][0]
         var_mem_bytes = lowest_var_mem.memory_instance.size//8
         if lowest_const_mem==lowest_var_mem:
-            var_mem_bytes-=mem_bytes
+            var_mem_bytes=mem_bytes
 
         if self.HAS_ANY_ADDITIONAL_BUFFER:
             schedule = self.layer.layer_attrs["get_match_schedule"](self)
