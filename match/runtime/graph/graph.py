@@ -99,9 +99,9 @@ class MatchTVMGraphRuntime:
                 inputs = []
                 for inp_node_idx in [inp_node_idxs[0] for inp_node_idxs in node["inputs"]]:
                     if self.mod_info["nodes"][inp_node_idx]["op"]!="null" and "_nop" in self.mod_info["nodes"][inp_node_idx]["name"]\
-                        and self.mod_info["nodes"][inp_node_idx]["name"] in nop_maps:
+                        and self.mod_info["nodes"][inp_node_idx]["name"]+'_'+str(inp_node_idx) in nop_maps:
                         # inputs is a nop skip
-                        inputs.append(nop_maps[self.mod_info["nodes"][inp_node_idx]["name"]])
+                        inputs.append(nop_maps[self.mod_info["nodes"][inp_node_idx]["name"]+'_'+str(inp_node_idx)])
                     else:
                         name_tens = self.mod_info["nodes"][inp_node_idx]["name"]
                         if self.mod_info["nodes"][inp_node_idx]["op"]!="null":
@@ -109,7 +109,7 @@ class MatchTVMGraphRuntime:
                         inputs.append(tensor_map[name_tens])
                 if "_nop" in node["name"]:
                     if len(inputs)==1:
-                        nop_maps[node["name"]] = inputs[0]
+                        nop_maps[node["name"]+'_'+str(node_id)] = inputs[0]
                     continue
                 
                 match_node, schedule, match_node_name = (None, None, None)
