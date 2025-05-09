@@ -96,6 +96,7 @@ class PulpCluster(ExecModule):
             conv: MatchOpConv2D = match_node.ops["conv2d"]
             padding = conv.padding
             filter_shape = conv.kernel_size
+            stride = conv.strides
             tile_inp_chs = schedule.tensor_tiles[inp_tensor.name][0].tiled_dims[3].size
             im2col_size_l1 = 0
             # im2col size only for std convs
@@ -106,8 +107,24 @@ class PulpCluster(ExecModule):
                 # CORES * (ks[0] * (tile_n_in + p[0] + p[2]) + ks[0])
                 im2col_size_l1 = self.NUM_CORES * (filter_shape[0] * (tile_inp_chs + padding[0] + padding[2]) + filter_shape[0])
             elif pattern_name=="conv2d_train":
-                # size in bytea
-                pass
+                # size in bytes
+                tile_inp_c = schedule.tensor_tiles[inp_tensor.name][0].tiled_dims[1].size
+                tile_inp_h = schedule.tensor_tiles[inp_tensor.name][0].tiled_dims[2].size
+                tile_inp_w = schedule.tensor_tiles[inp_tensor.name][0].tiled_dims[3].size
+                print('HERE!', tile_inp_c, tile_inp_h, tile_inp_w, padding, filter_shape)                
+                # from the pulp-trainlib code
+                # define IM2COL_SIZE (Tker_H_l1*Tker_W_l1*Tin_C_l1*
+                # ((Tin_H_l1-Tker_H_l1+PAD_U+PAD_D+STRIDE_H)/STRIDE_H)*
+                # ((Tin_W_l1-Tker_W_l1+PAD_L+PAD_R+STRIDE_W)/STRIDE_W))
+
+                im2col_size_l1 = (
+                    filter_shape[0] * filter_shape[1] * tile_inp_chs *
+                    ((tile_inp_h - filter_shape[0] + padding[0] + padding[2] + stride[0]) // stride[0]) *
+                    ((tile_inp_w - filter_shape[1] + padding[1] + padding[3] + stride[1]) // stride[1])
+                ) * 4
+                print('HERE!', tile_inp_c, tile_inp_h, tile_inp_w, padding, filter_shape, stride)                
+                print(f"IM2COL SIZE L1: {im2col_size_l1/1024} KB")
+                #im2col_size_l1 = self.NUM_CORES * (filter_shape[0] * (tile_inp_chs + padding[0] + padding[2]) + filter_shape[0])
 
             if im2col_size_l1:
                 schedule.buffers.append(MatchMemBuffer(name="im2col", mem_name="L1_SCRATCHPAD",
