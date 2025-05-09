@@ -20,6 +20,11 @@ void* ${node.name}_resource_handle_;
 % endif
 % endfor
 
+// Perf counters
+% for  node in nodes:
+int ${node.name}_perf_cnt;
+% endfor
+
 int match_${model_name}_run_graph(
     % for rt_i in rt_inputs:
     ${rt_i.c_type}* ${rt_i.name}_pt,
@@ -69,6 +74,8 @@ int match_${model_name}_run_graph(
     #if __${model_name}_FALLBACK_GRAPH_DEBUG__
     % endif
     printf("[${model_name} GRAPH] Running ${'TVM' if node.fallback else 'MATCH'} node ${node.name}\n");
+    reset_match_perf_counter();
+    start_match_perf_counter();
     % if node.fallback:
     #endif
     % endif
@@ -119,6 +126,8 @@ int match_${model_name}_run_graph(
     ) return -1;
     % endif
     #if __${model_name}_GRAPH_DEBUG__
+    stop_match_perf_counter();
+    ${node.name}_perf_cnt = get_match_acc_perf_counter();
     % if node.fallback:
     #if __${model_name}_FALLBACK_GRAPH_DEBUG__
     % endif
@@ -132,6 +141,15 @@ int match_${model_name}_run_graph(
     % endif
     #endif
     % endfor
+
+    // print perf counters
+    #if __${model_name}_GRAPH_DEBUG__
+    printf("Profiling Layer Performance\n");
+    % for node in nodes:
+    printf("[${node.fn_name}] Cycles:\t%d\n", ${node.name}_perf_cnt );
+    % endfor
+    #endif
+
     // final cleanup
     % if mem_needed_bytes>0:
     ${target.free_fn}(match_mem);
