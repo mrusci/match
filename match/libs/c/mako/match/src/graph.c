@@ -30,6 +30,10 @@ int match_${model_name}_run_graph(
 ){
     % if ext_mem_needed_bytes>0:
     void* match_ext_mem = ${target.allocate_ext_mem}(${ext_mem_needed_bytes});
+    if (!match_mem) {
+        printf("Error: match_mem allocation failed\n");
+        return -1;
+    }
     int ext_mem_offset = 0;
     % endif
     % if mem_needed_bytes>0:
@@ -118,7 +122,11 @@ int match_${model_name}_run_graph(
     % if node.fallback:
     #if __${model_name}_FALLBACK_GRAPH_DEBUG__
     % endif
+    % if node.dtype_output_node=="float32":
+    printf("[${model_name} GRAPH] ${'TVM' if node.fallback else 'MATCH'} node ${node.name} done, relative error between output and checksum by %.4f\n", match_float_checksum_check(${node.outputs[0].name}_pt, __${model_name}_GRAPH_${node.name}_BYTES__, __${model_name}_GRAPH_${node.name}_CHECKSUM__, 0));
+    % else:
     printf("[${model_name} GRAPH] ${'TVM' if node.fallback else 'MATCH'} node ${node.name} done, output differs from checksum by %d\n", match_byte_checksum_check(${node.outputs[0].name}_pt, __${model_name}_GRAPH_${node.name}_BYTES__, __${model_name}_GRAPH_${node.name}_CHECKSUM__));
+    % endif
     % if node.fallback:
     #endif
     % endif

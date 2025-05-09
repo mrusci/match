@@ -17,7 +17,8 @@ class MatchGraphRuntimeNodeCall:
         node_id: int=0,
         node_name: str=None,
         schedule=None,
-        match_node=None
+        match_node=None,
+        dtype_output_node='int8',
     ):
         self.inputs = inputs
         self.outputs = outputs
@@ -29,6 +30,7 @@ class MatchGraphRuntimeNodeCall:
         self.node_name = node_name
         self.schedule = schedule
         self.match_node = match_node
+        self.dtype_output_node = dtype_output_node
 
 
 class MatchTVMGraphRuntime:
@@ -176,7 +178,8 @@ class MatchTVMGraphRuntime:
                                                       name=self.model_name+"_node_"+str(node_id),
                                                       fn_name=node["attrs"]["func_name"], node_info=node,
                                                       node_id=node_id, node_name=match_node_name,
-                                                      schedule=schedule, match_node=match_node)
+                                                      schedule=schedule, match_node=match_node,
+                                                      dtype_output_node=dtypes[node_id])
                 nodes.append(call_node)
                 nodes_map[node["name"]] = call_node
                 map_names[tens_name] = (call_node.name, node["name"]+"_out", node["name"])
@@ -210,6 +213,17 @@ class MatchTVMGraphRuntime:
                     break
             if mem_tensor_ is not None:
                 np.frombuffer(activation.flatten().tobytes(),dtype="uint8").tofile(Path(self.out_path+f"/golden/{self.model_name}_{activation_name}_data.hex"))
+        
+        # compute the checksums in the correct data type            
+        checksums = {}
+        for activation_name, activation in activations.items():
+            print(activation_name, dtype_activations[activation_name])
+            if dtype_activations[activation_name] == 'float32':
+                checksums[activation_name] = np.frombuffer(activation.flatten(), dtype="float32").sum()
+            else: # FIXME 
+                checksums[activation_name] = np.frombuffer(activation.flatten().tobytes(),dtype="uint8").sum()
+        
+        # template data for code generation
         template_data = {
             "target": self.target,
             "mem_tensors": mem_tensors,
