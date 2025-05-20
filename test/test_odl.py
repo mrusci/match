@@ -142,6 +142,48 @@ def run_model_relay(tvmvir_mod_filename, tvmvir_params_filename,
         output_path=output_path
     )
 
+def run_multi_model_relay(tvmvir_mod_filename_list, tvmvir_params_filename, 
+                    target_name: str="pulp_platform", model: str="keyword_spotting", # FIXME change me!!!!
+                    output_path: str="./builds/last_build", executor: str="aot",
+                    golden_cpu_model: bool=False, input_files: List[str]=[], 
+                    min_input_val=None, max_input_val=None ):
+    
+    #define HW Target inside match
+    if target_name not in TEST_TARGET:
+        raise Exception(f"{target_name} target is not available, the targets available are {[k for k in TEST_TARGET.keys()]}")
+    target = TEST_TARGET[target_name]()
+
+    multi_model = {}
+    for i, filename in enumerate(tvmvir_mod_filename_list):
+        print('filename: ', filename)
+        matchmodel = MatchModel(
+           filename=filename,
+           params_filename = tvmvir_params_filename,
+           model_type="relay_odl",
+           model_name='model_'+str(i), 
+           executor=executor,
+           golden_cpu_model=golden_cpu_model,
+           debug=True
+        )
+        print('name: ', matchmodel.model_name)
+        multi_model[matchmodel.model_name] = matchmodel
+
+    match.match_multi_model(
+        models=multi_model,
+        target=target,
+        output_path=output_path,
+        default_model='model_0'
+    )
+#def match(model: MatchModel=None, target: MatchTarget=None, output_path: str="./match_output"):
+#    return match_multi_model(
+#        models={model.model_name: model}, 
+#        target=target, 
+#                             output_path=output_path, 
+#                             default_model=model.model_name
+#                             )
+
+
+
 def run_relay_saved_model_at(target_name: str="pulp_platform", mod_file: str="./models/last_model/model_graph.relay",
                              params_file: str="./models/last_model/model_params.txt", output_path: str="./builds/last_build",
                              executor: str="aot", golden_cpu_model: bool=False, input_files: List[str]=[],
@@ -163,8 +205,8 @@ def run_relay_saved_model_at(target_name: str="pulp_platform", mod_file: str="./
                                              min_input_val=min_input_val, max_input_val=max_input_val),
            golden_cpu_model=golden_cpu_model
         ),
-        target=target,
-        output_path=output_path
+        target = target,
+        output_path = output_path
     )
 
 if __name__=="__main__":
@@ -263,7 +305,7 @@ if __name__=="__main__":
         Path(os.path.dirname(__file__)+"/builds").mkdir()
     if args.compile_last_model and Path(os.path.dirname(__file__)+"/models/last_model").is_dir() and \
         Path(os.path.dirname(__file__)+"/models/last_model/model_graph.relay").exists() and \
-            Path(os.path.dirname(__file__)+"/models/last_model/model_params.txt").exists():
+            Path(os.path.dirname(__file__)+"/models/last_model/model_params.txt").exists() and False:
         run_relay_saved_model_at(target_name=args.target,
                                  mod_file=str(Path(os.path.dirname(__file__)+"/models/last_model/model_graph.relay").absolute()),
                                  params_file=str(Path(os.path.dirname(__file__)+"/models/last_model/model_params.txt").absolute()),
@@ -273,7 +315,21 @@ if __name__=="__main__":
                                  max_input_val=args.max_input_val
                                  )
     else:
-        if args.relay_model!="":
+        if len(args.relay_model.split(','))>1:
+            filename_list = args.relay_model.split(',')
+            print(filename_list)
+            run_multi_model_relay( filename_list, 
+                            args.relay_params_filename, 
+                      target_name=args.target,
+                      model="test_bp_tvm",
+                      output_path=str(Path(os.path.dirname(__file__)+"/builds/last_build").absolute()),
+                      executor=args.executor,
+                      golden_cpu_model=args.golden,
+                      input_files=args.input_files,
+                      min_input_val=args.min_input_val,
+                      max_input_val=args.max_input_val
+                      )            
+        elif args.relay_model!="":
             run_model_relay( args.relay_model, args.relay_params_filename, 
                       target_name=args.target,
                       model="test_bp_tvm",

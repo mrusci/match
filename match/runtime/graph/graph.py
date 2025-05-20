@@ -155,7 +155,7 @@ class MatchTVMGraphRuntime:
                 # get the activations values for debugging purposes
                 node_activations = list()
                 for tens_inp in inputs:
-                    if tens_inp.is_input or tens_inp.is_intermediate:
+                    if tens_inp.is_input or tens_inp.is_intermediate or (len(tens_inp.used_at)>0 and tens_inp.is_output):
                         node_activations.append(tvm.nd.array(activations[tens_inp.name]))
                     elif tens_inp.is_constant:
                         node_activations.append(tvm.nd.array(tens_inp.original_constant_val))
