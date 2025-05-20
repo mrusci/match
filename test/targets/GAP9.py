@@ -9,7 +9,7 @@ from tvm import relay
 
 # pulp config
 PULP_CORES = 8
-L1_SCRATCHPAD_KB_SIZE = 90
+L1_SCRATCHPAD_KB_SIZE = 101
 L2_SHARED_MEM_KB_SIZE = 1496
 L3_FLASH_KB_SIZE = 89128
 ASYNC_DMA = False
@@ -35,7 +35,6 @@ class GAP9(MatchTarget):
         self.set_target_host()
         self.set_paths()
         self.set_apis()
-        self.soc_memory_bytes = L2_SHARED_MEM_KB_SIZE*1024
 
     def set_target_host(self):
         self.cpu_type = "riscv_cpu"
@@ -67,7 +66,7 @@ class GAP9(MatchTarget):
         self.alloc_fn = "malloc_wrapper"
         self.free_fn = "free_wrapper"
         # external memory management
-        self.allocate_ext_mem = "pulp_init_ram"
+        self.allocate_ext_mem = "pulp_alloc_ram"
         self.load_file_to_ext_mem_fn = "pulp_load_file"
         self.load_to_ext_mem_fn = "pulp_memcpy_to_ram"
         self.load_from_ext_mem_fn = "pulp_memcpy_from_ram"

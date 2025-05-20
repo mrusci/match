@@ -7,8 +7,9 @@ def relay_from_file(relay_filename,params_filename, odl=False):
     params_bytes=bytes("","utf8")
     with open(relay_filename,"r") as mod_file:
         mod_text=mod_file.read()
-    with open(params_filename,"rb") as params_file:
-        params_bytes=params_file.read()
+    if params_filename is not None:
+        with open(params_filename,"rb") as params_file:
+            params_bytes=params_file.read()
     if not odl:
         mod=relay.fromtext(mod_text)
     else:
@@ -21,7 +22,7 @@ def relay_from_file(relay_filename,params_filename, odl=False):
             None,
             None,
         )
-    params=relay.load_param_dict(params_bytes)
+    params={} if len(params_bytes)==0 else relay.load_param_dict(params_bytes)
     return mod, params
 
 def get_relay_from(input_type, filename, params_filename):

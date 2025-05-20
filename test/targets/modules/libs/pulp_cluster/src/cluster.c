@@ -338,7 +338,7 @@ void pulp_nn_dense_wrapper(void* args){
         // activations pt  
         tensors[0].pt, // acts pt
         // bias pt
-        tensors[2].pt, // bias pt
+        num_tensors>4? NULL:tensors[2].pt, // bias pt
         // output pt
         tensors[num_tensors-1].pt, // output pt
         // weights pt
@@ -408,7 +408,7 @@ void pulp_nn_dw_conv2d_wrapper(void* args){
         // im2col
         im2col_pt_,
         // bias pt
-        tensors[2].pt, // bias pt
+        num_tensors>4? NULL:tensors[2].pt, // bias pt
         // output pt
         tensors[num_tensors-1].pt, // output pt
         // weights pt
@@ -468,7 +468,7 @@ void pulp_nn_pw_conv2d_wrapper(void* args){
         // im2col
         im2col_pt_,
         // bias pt
-        tensors[2].pt, // bias pt
+        num_tensors>4? NULL:tensors[2].pt, // bias pt
         // output pt
         tensors[num_tensors-1].pt, // output pt
         // weights pt
@@ -527,7 +527,7 @@ void pulp_nn_hoparallel_conv2d_wrapper(void* args){
         // im2col
         im2col_pt_,
         // bias pt
-        tensors[2].pt, // bias pt
+        num_tensors>4? NULL:tensors[2].pt, // bias pt
         // output pt
         tensors[num_tensors-1].pt, // output pt
         // weights pt

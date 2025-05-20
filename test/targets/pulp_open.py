@@ -10,8 +10,8 @@ from tvm import relay
 # pulp config
 PULP_CORES = 8
 L1_SCRATCHPAD_KB_SIZE = 128
-L2_SHARED_MEM_KB_SIZE = 512*1024
-L3_FLASH_KB_SIZE = 8*1024*1024
+L2_SHARED_MEM_KB_SIZE = 8*1024
+L3_FLASH_KB_SIZE = 8*1024
 ASYNC_DMA = False
 
 class PulpOpen(MatchTarget):
@@ -28,7 +28,6 @@ class PulpOpen(MatchTarget):
         self.set_target_host()
         self.set_paths()
         self.set_apis()
-        self.soc_memory_bytes = L2_SHARED_MEM_KB_SIZE
 
     def set_target_host(self):
         self.cpu_type = "riscv_cpu"
@@ -60,7 +59,7 @@ class PulpOpen(MatchTarget):
         self.alloc_fn = "malloc_wrapper"
         self.free_fn = "free_wrapper"
         # external memory management
-        self.allocate_ext_mem = "pulp_init_ram"
+        self.allocate_ext_mem = "pulp_alloc_ram"
         self.load_file_to_ext_mem_fn = "pulp_load_file"
         self.load_to_ext_mem_fn = "pulp_memcpy_to_ram"
         self.load_from_ext_mem_fn = "pulp_memcpy_from_ram"

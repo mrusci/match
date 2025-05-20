@@ -65,19 +65,19 @@ RUN echo "source /pulp-sdk/configs/pulp-open.sh" >> ~/.bashrc
 
 WORKDIR /
 
-RUN git clone --recursive https://github.com/eml-eda/match.git
+COPY . /match
 
 WORKDIR /match
-
-RUN git submodule update --init --recursive
 
 RUN xargs -a system_requirements.txt apt install -y
 
 RUN pip3 install -r requirements.txt
 
+RUN git submodule update --init --recursive
+
 RUN TVM_NCORES_INSTALL=${TVM_NCORES_INSTALL} make build_tvm_single_core
 
-RUN python3 setup.py install
+RUN python3 setup.py install --user
 
 ENV TVM_HOME="/match/match-tvm"
 ENV PYTHONPATH="${TVM_HOME}/python:/match/zigzag:"

@@ -152,6 +152,7 @@ class MatchTVMGraphRuntime:
                                                is_intermediate=id_out==-1,
                                                 shape=tuple(shapes[node_id]),dtype=np.dtype(dtypes[node_id]),
                                                 node_id=node_id)
+                mem_tensor.update_last_usage(node_id)
                 # get the activations values for debugging purposes
                 node_activations = list()
                 for tens_inp in inputs:
@@ -209,6 +210,8 @@ class MatchTVMGraphRuntime:
         for mem_tensor in mem_tensors:
             if mem_tensor.stored_in_external_memory and mem_tensor.is_constant:
                 np.frombuffer(mem_tensor.constant_val.flatten().tobytes(),dtype="uint8").tofile(Path(self.out_path+f"/parameters/{self.model_name}_{mem_tensor.name}_data.hex"))
+            elif mem_tensor.stored_in_external_memory and mem_tensor.is_input:
+                np.frombuffer(activations[mem_tensor.name].flatten().tobytes(),dtype="uint8").tofile(Path(self.out_path+f"/parameters/{self.model_name}_{mem_tensor.name}_data.hex"))
         for activation_name, activation in activations.items():
             mem_tensor_ = None
             for m_t in mem_tensors:
