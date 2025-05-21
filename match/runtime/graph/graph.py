@@ -114,7 +114,9 @@ class MatchTVMGraphRuntime:
                 if "_nop" in node["name"]:
                     if len(inputs)==1:
                         nop_maps[node["name"]+'_'+str(node_id)] = inputs[0]
-                    continue
+                    else:
+                        pass #FIXME! what happend here?
+                    continue # need to be removed ?!
                 
                 match_node, schedule, match_node_name = (None, None, None)
                 host_lib = None
@@ -140,6 +142,9 @@ class MatchTVMGraphRuntime:
                 for inp in inputs:
                     if "match" not in node["name"]:
                         inp.used_by_tvm = True
+                    # every node that is input to another node and it is not an graph input is also an intermediate
+                    if not inp.is_input and not inp.is_constant:
+                        inp.is_intermediate = True
                     inp.update_last_usage(node_id)
                 id_out = -1
                 tens_name = self.model_name+"_node_"+str(node_id)+"_out"
@@ -156,7 +161,7 @@ class MatchTVMGraphRuntime:
                 # get the activations values for debugging purposes
                 node_activations = list()
                 for tens_inp in inputs:
-                    if tens_inp.is_input or tens_inp.is_intermediate or (len(tens_inp.used_at)>0 and tens_inp.is_output):
+                    if tens_inp.is_input or tens_inp.is_intermediate: # or (len(tens_inp.used_at)>0 and tens_inp.is_output):
                         node_activations.append(tvm.nd.array(activations[tens_inp.name]))
                     elif tens_inp.is_constant:
                         node_activations.append(tvm.nd.array(tens_inp.original_constant_val))
@@ -202,7 +207,12 @@ class MatchTVMGraphRuntime:
         self.mem_needed_bytes, self.ext_mem_needed_bytes = self.mem_planner.generate()
 
         inputs = [tens for tens in mem_tensors if tens.is_input]
-        outputs = [tens for tens in mem_tensors if tens.is_output]
+        outputs = []
+        for head in heads:
+            for tens in mem_tensors:
+                if tens.node_id == head and not tens.is_constant:
+                    outputs.append(tens)
+                    break
         if not Path(self.out_path+"/parameters").absolute().is_dir():
             Path(self.out_path+"/parameters").absolute().mkdir()
         if not Path(self.out_path+"/golden").absolute().is_dir():
