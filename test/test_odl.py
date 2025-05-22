@@ -136,7 +136,10 @@ def run_model_relay(tvmvir_mod_filename, tvmvir_params_filename,
 #           default_inputs=get_default_inputs(mod=mod, input_files=input_files,
 #                                             min_input_val=min_input_val, max_input_val=max_input_val),
            golden_cpu_model=golden_cpu_model,
-           debug=True
+           debug=True,
+            debug_fallback=True,
+            profile=True,
+            profile_fallback=True,
         ),
         target=target,
         output_path=output_path
@@ -174,14 +177,6 @@ def run_multi_model_relay(tvmvir_mod_filename_list, tvmvir_params_filename,
         output_path=output_path,
         default_model='model_0'
     )
-#def match(model: MatchModel=None, target: MatchTarget=None, output_path: str="./match_output"):
-#    return match_multi_model(
-#        models={model.model_name: model}, 
-#        target=target, 
-#                             output_path=output_path, 
-#                             default_model=model.model_name
-#                             )
-
 
 
 def run_relay_saved_model_at(target_name: str="pulp_platform", mod_file: str="./models/last_model/model_graph.relay",

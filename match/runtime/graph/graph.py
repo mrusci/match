@@ -58,20 +58,21 @@ class MatchTVMGraphRuntime:
 
     def generate(self):
         tensor_map = {}
-        idx_tensor_map = {}
+        out_tensor_map = {}
         nodes_map = {}
         map_names = dict()
         mem_tensors = []
         nodes = []
         dtypes = self.mod_info["attrs"]["dltype"][1]
         shapes = self.mod_info["attrs"]["shape"][1]
-        heads = [head[0] for head in self.mod_info["heads"]]
+        heads = [head[0] for head in self.mod_info["heads"]]    # list of the output nodes
         nop_maps = dict()
         activations = dict()
         dtype_activations = dict()
         for match_inp in self.match_inputs.values():
             activations[match_inp["name"]] = match_inp["np_values"]
             dtype_activations[match_inp["name"]] = match_inp["np_values"].dtype
+        #iterate over the nodes
         for node_id,node in enumerate(self.mod_info["nodes"]):
             if node["op"]=="null":
                 # input or parameter
@@ -93,7 +94,7 @@ class MatchTVMGraphRuntime:
                     )
                     mem_tensors.append(mem_tensor)
                     tensor_map[node["name"]] = mem_tensor
-                    idx_tensor_map[(node_id,0)] = mem_tensor
+                    out_tensor_map[(node_id,0)] = mem_tensor
                     map_names[node["name"]] = (mem_tensor.name, mem_tensor.name, mem_tensor.name)
                 else:
                     mem_tensor = MatchMemoryTensor(name=node["name"],is_input=True,
@@ -102,7 +103,7 @@ class MatchTVMGraphRuntime:
                                                    node_id=node_id, node_info=node)
                     mem_tensors.append(mem_tensor)
                     tensor_map[node["name"]] = mem_tensor
-                    idx_tensor_map[(node_id,0)] = mem_tensor
+                    out_tensor_map[(node_id,0)] = mem_tensor
                     map_names[node["name"]] = (mem_tensor.name, mem_tensor.name, mem_tensor.name)
                     if node_id in heads:
                         mem_tensor_out = MatchMemoryTensor(
@@ -112,7 +113,7 @@ class MatchTVMGraphRuntime:
                             node_id=-1, node_info=node
                         )
                         mem_tensors.append(mem_tensor_out)
-                        idx_tensor_map[(node_id,0)] = mem_tensor_out
+                        out_tensor_map[(node_id,0)] = mem_tensor_out
             else:
                 inputs = []
                 for inp_node_idx in [inp_node_idxs[0] for inp_node_idxs in node["inputs"]]:
@@ -128,9 +129,32 @@ class MatchTVMGraphRuntime:
                 if "_nop" in node["name"]:
                     if len(inputs)==1:
                         nop_maps[node["name"]+'_'+str(node_id)] = inputs[0]
-                    else:
-                        pass #FIXME! what happend here?
-                    continue # need to be removed ?!
+                        input_ptr = inputs[0]
+                        # give also the right name to the tensor
+                        id_out = False
+                        tens_name = None
+                        for head_idx,head in enumerate(heads):
+                            if head==node_id:
+                                id_out = True
+                                tens_name = self.model_name+"_out_"+str(head_idx)
+                                break
+                        if id_out:
+                            input_ptr.is_output = True
+
+                            mem_tensor = out_tensor_map[(input_ptr.node_id,0)]
+                            del out_tensor_map[(input_ptr.node_id,0)]
+                            out_tensor_map[(node_id,0)] = mem_tensor
+
+                            #rename tensor name and activation name
+                            prev_tens_name = input_ptr.name
+                            input_ptr.name = tens_name
+                            activations[input_ptr.name] = activations[prev_tens_name]
+                            del activations[prev_tens_name]
+                            dtype_activations[input_ptr.name] = dtype_activations[prev_tens_name]
+                            del dtype_activations[prev_tens_name]
+                            map_names[input_ptr.name] = map_names[prev_tens_name]
+                            del map_names[prev_tens_name]
+                    continue
                 
                 match_node, schedule, match_node_name = (None, None, None)
                 host_lib = None
@@ -151,7 +175,7 @@ class MatchTVMGraphRuntime:
                                 )
                                 mem_tensors.append(mem_tensor)
                                 tensor_map[w_tensor.name] = mem_tensor
-                                idx_tensor_map[(node_id,0)] = mem_tensor
+                                out_tensor_map[(node_id,0)] = mem_tensor
                                 inputs.append(mem_tensor)
                 # inputs = [mem_tensors[inp_node_idx] for inp_node_idx in [inp_node_idxs[0] for inp_node_idxs in node["inputs"]]]
                 for inp in inputs:
@@ -174,13 +198,13 @@ class MatchTVMGraphRuntime:
                     shape=tuple(shapes[node_id]),dtype=np.dtype(dtypes[node_id]),
                     node_id=node_id
                 )
-                idx_tensor_map[(node_id,0)] = mem_tensor
+                out_tensor_map[(node_id,0)] = mem_tensor
                 if mem_tensor.is_output:
                     cnt_ = 0
                     for head_idx,head in [(head_idx, head) for head_idx, head in enumerate(heads)][id_out+1:]:
                         if head==node_id:
                             cnt_ += 1
-                            idx_tensor_map[(node_id,cnt_)] = MatchMemoryTensor(
+                            out_tensor_map[(node_id,cnt_)] = MatchMemoryTensor(
                                 name=self.model_name+"_out_"+str(head_idx),
                                 is_input=False,
                                 is_output=True,
@@ -244,7 +268,7 @@ class MatchTVMGraphRuntime:
                 found_outputs_cnt[head] = 0
             else:
                 found_outputs_cnt[head] += 1
-            outputs.append(idx_tensor_map[(head, found_outputs_cnt[head])])
+            outputs.append(out_tensor_map[(head, found_outputs_cnt[head])])
         if not Path(self.out_path+"/parameters").absolute().is_dir():
             Path(self.out_path+"/parameters").absolute().mkdir()
         if not Path(self.out_path+"/golden").absolute().is_dir():

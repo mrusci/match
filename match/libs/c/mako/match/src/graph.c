@@ -21,9 +21,11 @@ void* ${node.name}_resource_handle_;
 % endfor
 
 // Perf counters
+#if __${model_name}_FALLBACK_GRAPH_PROFILE__
 % for  node in nodes:
 int ${node.name}_perf_cnt;
 % endfor
+#endif
 
 int match_${model_name}_run_graph(
     % for rt_i in rt_inputs:
@@ -52,7 +54,7 @@ int match_${model_name}_run_graph(
     % if (mem_tensor.is_input or mem_tensor.is_output) and (len(mem_tensor.move_temp_to_ext_mem)>0 or len(mem_tensor.load_from_ext_mem_at)>0):
     void* ${mem_tensor.name}_pt = match_mem+${mem_tensor.mem_offset};
     % endif
-    % if mem_tensor.is_intermediate or (mem_tensor.is_constant and mem_tensor.stored_in_external_memory):
+    % if not mem_tensor.is_output and (mem_tensor.is_intermediate or (mem_tensor.is_constant and mem_tensor.stored_in_external_memory)):
     void* ${mem_tensor.name}_pt = match_mem+${mem_tensor.mem_offset};
     % if len(mem_tensor.load_from_ext_mem_at)>0:
     void* ${mem_tensor.name}_ext_pt = match_ext_mem+ext_mem_offset;
@@ -134,6 +136,7 @@ int match_${model_name}_run_graph(
     #if __${model_name}_GRAPH_PROFILE__
     end = ${target.end_get_timestamp_api}();
     time_elapsed_ms = ((double)(end - start)) ${target.timestamp_to_ms};
+    ${node.name}_perf_cnt = (int)(end - start);
     printf("[${model_name} GRAPH] MATCH node ${node.name} done, took %fms\n", time_elapsed_ms);
     #endif
     % endif
@@ -156,7 +159,7 @@ int match_${model_name}_run_graph(
     % endfor
 
     // print perf counters
-    #if __${model_name}_GRAPH_DEBUG__
+    #if __${model_name}_FALLBACK_GRAPH_PROFILE__
     printf("Profiling Layer Performance\n");
     % for node in nodes:
     printf("[${node.fn_name}] Cycles:\t%d\n", ${node.name}_perf_cnt );
