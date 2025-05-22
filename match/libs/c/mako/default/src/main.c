@@ -31,6 +31,11 @@ int main(int argc,char** argv){
     #endif
     % endfor
     % for out_idx,(out_name,out) in enumerate(match_outputs.items()):
+    % if out["is_copy_of"]:
+    void* ${out_name}_pt = ${out["is_copy_of"]}_pt;
+    % elif out["associated_input"]!="":
+    void* ${out_name}_pt = ${out["associated_input"]}_pt;
+    % else:
     #if !defined(__${default_model}_GRAPH_${default_model}_out_${out_idx}_FROM_EXTERNAL_MEM__) || !__${default_model}_GRAPH_${default_model}_out_${out_idx}_FROM_EXTERNAL_MEM__
     ${out["c_type"]}* ${out_name}_pt = ${target.alloc_fn}(sizeof(${out["c_type"]}) * ${out["prod_shape"]});
     % if golden_cpu_model:
@@ -44,6 +49,7 @@ int main(int argc,char** argv){
     ext_mem_offset += ${out["bytes"]};
     % endif
     #endif
+    % endif
     % endfor
 
     match_${"golden_check_" if golden_cpu_model else ""}${default_model}_runtime(
@@ -78,12 +84,14 @@ int main(int argc,char** argv){
     % endif
     
     % for out_idx,out_name in enumerate(match_outputs.keys()):
+    % if out["is_copy_of"]=="" and out["associated_input"]=="":
     #if !defined(__${default_model}_GRAPH_${default_model}_out_${out_idx}_FROM_EXTERNAL_MEM__) || !__${default_model}_GRAPH_${default_model}_out_${out_idx}_FROM_EXTERNAL_MEM__
     % if golden_cpu_model:
     ${target.free_fn}(golden_check_${out_name}_pt);
     % endif
     ${target.free_fn}(${out_name}_pt);
     #endif
+    % endif
     % endfor
 
     #if defined(__${default_model}_GRAPH_INPUTS_OUTPUTS_EXT_MEM__) && __${default_model}_GRAPH_INPUTS_OUTPUTS_EXT_MEM__>0
